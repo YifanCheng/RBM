@@ -506,9 +506,9 @@ SUBROUTINE SYSTMM(temp_file,param_file)
                                     !
                                     !call reservoir_subroutine(res_no,q_surf)
                                     !if (res_storage(res_no,1) .gt.res_capacity_mcm(res_no)*(10**6)*0.2) then
-                                        call reservoir_subroutine_implicit(res_no,q_surf,nd,dbt(ncell))
+                                    !    call reservoir_subroutine_implicit(res_no,q_surf,nd,dbt(ncell))
                                     !else
-                                    !    call reservoir_single_subroutine(res_no,q_surf,nd)
+                                        call reservoir_single_subroutine(res_no,q_surf,nd)
                                     !end if 
                                     !
                                     T_0 = T_hypo(res_no) ! In reservoir, water is released from hypolimnion
