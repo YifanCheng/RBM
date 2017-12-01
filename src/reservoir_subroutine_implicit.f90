@@ -29,7 +29,8 @@ SUBROUTINE reservoir_subroutine_implicit(res_no,q_surf,nd,tair)
     if(n_stability .le. 0) then
         n_stability = 1e-10
     end if
-    log_K_z = log10(n_stability) * (-1)  - 5.699 ! high scenario - 2  w/ adjusted intercept based on empirical equation in Quay et al. 1980, Fig 11
+    !log_K_z = log10(n_stability) * (-1)  - 5.699 ! high scenario - 2  w/ adjusted intercept based on empirical equation in Quay et al. 1980, Fig 11
+    log_K_z = log10(n_stability) * (-0.65)  - 3.1
     K_z(res_no) = 10**log_K_z
     ! ONLY for no stratification run:
     write(57, *) res_no,K_z(res_no)
