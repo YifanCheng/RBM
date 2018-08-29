@@ -59,7 +59,7 @@ SUBROUTINE Energy(T_surf,q_surf,ncell,z,nd)
 !               Calculate equilibrium temperature
 !     ******************************************************
 !
-if (ncell.eq.644) then
+if (ncell.eq.650) then
     iter=1
     temp_equil=T_surf
     q_tot=q_surf
@@ -110,12 +110,13 @@ if (ncell.eq.644) then
         rate_temp=q_tot/(z*rfac)
         temp_calc=temp_calc+rate_temp*timestep
         tot_timestep=tot_timestep+1
-        if (nd.gt.150) then
-            write(88,*) 'sub',nd,tot_timestep,temp_equil,temp_calc,rate_temp,timestep
+        if (nd.eq.197) then
+            write(88,*) 'sub',nd,tot_timestep,temp_equil,temp_calc,rate_temp,q_tot,z,timestep, &
+                        'energy',q_ns(ncell),q_na(ncell),q_ws,q_evap,q_conv
         end if
     enddo
     time_equil=tot_timestep*timestep
-    if (nd.gt.150) then
+    if (nd.eq.197) then
         write(88,*) nd,temp_equil,temp_calc,num_timestep,timestep,tot_timestep,error_estimate
     end if
 end if
