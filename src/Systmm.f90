@@ -4,6 +4,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use data_type
     !
     Implicit None
     !
@@ -81,9 +82,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     allocate (res_storage(nres,2))
     res_storage=0
     allocate (T_epil(nres))
-    T_epil = 4
+    T_epil = 10.0
     allocate (T_hypo(nres))
-    T_hypo = 4
+    T_hypo = 10.0
     allocate (T_res_in(nres))
     allocate (Q_res_in(nres))
     allocate (T_res_inflow(nres))
@@ -546,7 +547,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                         !     Error estimation
                                         !
                                         if (.not.exceed_error_bound) then
-                                            call Error_estimate(nd,res_no)
+                                            call Error_estimate(nd,res_no,q_surf)
                                         end if
                                         !
                                         !     Adjust the timestep based on error

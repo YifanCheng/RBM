@@ -2,6 +2,7 @@
 ! Module for reservoir characteristic and parameters
 !
 module Block_Reservoir
+    use data_type
     !
     ! Logical
     !
@@ -19,7 +20,7 @@ module Block_Reservoir
     !
     real, parameter :: depth_e_frac=0.4, depth_h_frac=0.6
     real, parameter :: ftsec_to_msec = 0.0283168, gravity = 9.8
-    real, parameter :: density = 1000, heat_c = 4180
+    real(dp), parameter :: density = 1000.0, heat_c = 4180.0
     real, parameter :: heat_c_kcal = 1
     real :: flow_in_epi_x, flow_in_hyp_x
     real :: flow_out_epi_x,flow_out_hyp_x
@@ -35,8 +36,8 @@ module Block_Reservoir
     real, parameter :: error_threshold = 0.1
     real, dimension(:),   allocatable  :: K_z
     real, dimension(:),   allocatable  :: depth_e, depth_h
-    real, dimension(:),   allocatable  :: density_epil, density_hypo
-    real, dimension(:),   allocatable  :: density_in
+    real(dp), dimension(:),   allocatable  :: density_epil, density_hypo
+    real(dp), dimension(:),   allocatable  :: density_in
     real, dimension(:),   allocatable  :: volume_e_x
     real, dimension(:),   allocatable  :: volume_h_x
     real, dimension(:),   allocatable  :: dV_dt_epi

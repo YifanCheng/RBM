@@ -1,10 +1,12 @@
 SUBROUTINE reservoir_subroutine_implicit(res_no,q_surf,nd,tair)
     use Block_Network
     use Block_Reservoir
+    use data_type
     !
     implicit none
     !
-    real :: dayx, q_surf, log_K_z, n_stability, density_dif
+    real :: dayx, q_surf, log_K_z, n_stability
+    real(dp) :: density_dif
     real :: dif_epi_x, dif_hyp_x, advec_in_epix, advec_in_hypx
     real :: advec_epi_hyp, energy_x
     real :: epix,hypox,volume_tot
@@ -26,8 +28,8 @@ SUBROUTINE reservoir_subroutine_implicit(res_no,q_surf,nd,tair)
     !if(density_dif .gt. -0.00001) density_dif= 0.00001
     n_stability = (-1) * (gravity/density_epil(res_no)) * &
         ((density_dif)/((depth_e(res_no) + depth_h(res_no))/2))
-    if(n_stability .le. 0) then
-        n_stability = 1e-10
+    if(n_stability .le. 1e-6) then
+        n_stability = 1e-6
     end if
     log_K_z = log10(n_stability) * (-1)  - 5.699 ! high scenario - 2  w/ adjusted intercept based on empirical equation in Quay et al. 1980, Fig 11
     K_z(res_no) = 10**log_K_z
