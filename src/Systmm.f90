@@ -533,8 +533,8 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                         !
                                         !     Calculate stream density 
                                         !
-                                        call stream_density(T_epil(res_no), density_epil(res_no), res_no)
-                                        call stream_density(T_hypo(res_no), density_hypo(res_no), res_no)
+                                        call stream_density(T_epil(res_no), density_epil(res_no))
+                                        call stream_density(T_hypo(res_no), density_hypo(res_no))
                                         !
                                         !     Calculate flow subroutine
                                         !
@@ -542,7 +542,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                         !
                                         !     Energy balance
                                         !
-                                        call energy(T_epil(res_no), q_surf, ncell)
+                                        call energy(T_epil(res_no), q_surf, ncell, z, nd)
                                         !
                                         !     Error estimation
                                         !
@@ -578,8 +578,8 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                             if (nseg_out(nr,ncell,nseg_temp).eq.nsegment) then
                                                 call WRITE(time,nd,nr,ncell,nsegment,T_0, &
                                                     T_head(nr),dbt(segment_cell(nr,nsegment)), &
-                                                    Q_res_inflow(res_no), Q_res_outflow(res_no), &
-                                                    res_storage_post, T_res(res_no))
+                                                    Q_res_inflow(res_no), Q_res_outflow(res_no)) !, &
+!                                                    res_storage_post, T_res(res_no))
                                             end if
                                         end do 
                                     end do
