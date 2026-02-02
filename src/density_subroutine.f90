@@ -1,7 +1,7 @@
-subroutine stream_density(temp_x,density_x,res_no)
+subroutine stream_density(temp_x,density_x)
     use data_type
     implicit none
-    integer :: res_no
+    !integer :: res_no
     real(dp) :: density_x
     real :: temp_x
     real(dp) :: para1 = 1.000028*1e-3
