@@ -17,6 +17,7 @@ Subroutine BEGIN(param_file,spatial_file)
     integer:: head_name,trib_cell
     integer:: jul_start,main_stem,nyear1,nyear2,nc,ncell,nseg
     integer:: ns_max_test,node,ncol,nrow,nr,cum_sgmnt
+    integer:: lat_id
     !
     integer:: nreservoir,nseg_temp,nseg_cum
     !
@@ -78,6 +79,7 @@ Subroutine BEGIN(param_file,spatial_file)
     conflnce=0
     allocate(reach_cell(nreach,ns_max))
     allocate(head_cell(nreach))
+    allocate(hru_id(heat_cells))
     allocate(segment_cell(nreach,ns_max))
     allocate(x_dist(nreach,0:ns_max))
     !
@@ -189,6 +191,8 @@ Subroutine BEGIN(param_file,spatial_file)
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0,i6)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
                 !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
+                read(lat,*) lat_id
+                hru_id(ncell)=lat_id
                 if(res_num(ncell) .gt. 0) then
                     res_pres(ncell) = .TRUE.
                 end if
@@ -196,6 +200,8 @@ Subroutine BEGIN(param_file,spatial_file)
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
                 !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
+                read(lat,*) lat_id
+                hru_id(ncell)=lat_id
             end if
             !
             !    Set the number of segments of the default, if not specified

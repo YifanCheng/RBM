@@ -19,5 +19,14 @@ Module Block_Control
     integer :: control_nres = 0
     logical :: control_select_withdraw = .FALSE.
     character(len=32) :: control_input_format = "ascii"
+    character(len=64) :: control_flow_var = "KWroutedRunoff"
+    character(len=64) :: control_flow_id_var = "reachID"
+    character(len=64) :: control_heat_id_var = "hruId"
+    character(len=64) :: control_heat_tair_var = "Tair_degC"
+    character(len=64) :: control_heat_vp_var = "vp_mb"
+    character(len=64) :: control_heat_sw_var = "SW_mmKs"
+    character(len=64) :: control_heat_lw_var = "LW_mmKs"
+    character(len=64) :: control_heat_press_var = "P_mb"
+    character(len=64) :: control_heat_wind_var = "U10"
 !
 end module Block_Control

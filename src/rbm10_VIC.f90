@@ -125,11 +125,13 @@ PROGRAM RBM10_VIC
     !
     !     Open file with hydrologic data
     !
-    open(unit=35,FILE=TRIM(flow_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
-    !
-    !     Open file with meteorologic data
-    !
-    open(unit=36,FILE=TRIM(heat_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+    if (TRIM(control_input_format) .ne. 'netcdf') then
+        open(unit=35,FILE=TRIM(flow_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+        !
+        !     Open file with meteorologic data
+        !
+        open(unit=36,FILE=TRIM(heat_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+    end if
     !
     !     Open file with reservoir parameters
     !
@@ -162,8 +164,10 @@ PROGRAM RBM10_VIC
     !
     write(*,*) ' Closing files after simulation'
 
-    CLOSE(35)
-    CLOSE(36)
+    if (TRIM(control_input_format) .ne. 'netcdf') then
+        CLOSE(35)
+        CLOSE(36)
+    end if
     CLOSE(37)
     CLOSE(38)
     CLOSE(39)

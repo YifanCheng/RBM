@@ -4,6 +4,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use Block_Control
     use data_type
 #ifdef USE_NETCDF
     use Netcdf_Output
@@ -24,6 +25,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     integer          :: npart,nseg,nx_s,nx_part,nx_head
     integer          :: ns_res_num, res_no, nsegment
     integer          :: nseg_temp
+    integer          :: Julian, jul_start, jul_end, jul_current
     !
     ! Indices for lagrangian interpolation
     !
@@ -162,6 +164,8 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     ndays=0
     xwpd=nwpd
     hpd=1./xwpd
+    jul_start = Julian(start_year,start_month,start_day)
+    jul_end = Julian(end_year,end_month,end_day)
     !
     !     Reservoir geomorphic information initialization
     !
@@ -191,6 +195,10 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
         !     Day loop starts
         !
         DO nd=1,nd_year
+            if (control_file_mode) then
+                jul_current = Julian(nyear,1,1) + nd - 1
+                if (jul_current .lt. jul_start .or. jul_current .gt. jul_end) cycle
+            end if
             year=nyear
             xd=nd
             xd_year=nd_year

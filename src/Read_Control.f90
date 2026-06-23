@@ -65,6 +65,24 @@ SUBROUTINE SET_CONTROL_VALUE(name,value)
         control_select_withdraw = CONTROL_LOGICAL(value)
     case ("input_format")
         control_input_format = TRIM(value)
+    case ("flow_var")
+        control_flow_var = TRIM(value)
+    case ("flow_id_var")
+        control_flow_id_var = TRIM(value)
+    case ("heat_id_var")
+        control_heat_id_var = TRIM(value)
+    case ("heat_tair_var")
+        control_heat_tair_var = TRIM(value)
+    case ("heat_vp_var")
+        control_heat_vp_var = TRIM(value)
+    case ("heat_sw_var")
+        control_heat_sw_var = TRIM(value)
+    case ("heat_lw_var")
+        control_heat_lw_var = TRIM(value)
+    case ("heat_press_var")
+        control_heat_press_var = TRIM(value)
+    case ("heat_wind_var")
+        control_heat_wind_var = TRIM(value)
     case default
         write(*,*) "Ignoring unknown control variable: ",TRIM(name)
     end select
@@ -101,8 +119,8 @@ SUBROUTINE CHECK_CONTROL(control_file)
     if (LEN_TRIM(control_output_prefix) .eq. 0) call MISSING_CONTROL(control_file,"output_prefix")
     if (LEN_TRIM(control_start_date) .eq. 0) call MISSING_CONTROL(control_file,"start_date")
     if (LEN_TRIM(control_end_date) .eq. 0) call MISSING_CONTROL(control_file,"end_date")
-    if (TRIM(control_input_format) .ne. "ascii") then
-        write(*,*) "Only <input_format> ascii is supported in this milestone."
+    if (TRIM(control_input_format) .ne. "ascii" .and. TRIM(control_input_format) .ne. "netcdf") then
+        write(*,*) "Unsupported <input_format>: ",TRIM(control_input_format)
         stop
     end if
 END SUBROUTINE CHECK_CONTROL
