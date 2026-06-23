@@ -18,7 +18,7 @@ module Netcdf_Input
     integer :: lw_varid = -1
     integer :: press_varid = -1
     integer :: wind_varid = -1
-    integer, allocatable :: flow_ids(:)
+    integer(kind=8), allocatable :: flow_ids(:)
     integer(kind=8), allocatable :: heat_ids(:)
     logical :: nc_forcing_open = .false.
 
@@ -36,6 +36,10 @@ contains
 
     subroutine NC_INPUT_INIT()
         integer :: dimid, nflow, nheat
+        integer :: var_ndims, var_dimids(nf90_max_var_dims), ntime
+        integer :: sy, sm, sd, ey, em, ed, ndays_needed, i, ncheck
+        integer :: f_idx, h_idx
+        integer, external :: Julian
 
         if (nc_forcing_open) return
 
@@ -60,6 +64,54 @@ contains
         allocate(heat_ids(nheat))
         call NC_INPUT_CHECK(nf90_get_var(flow_ncid, flow_id_varid, flow_ids), 'read flow ids')
         call NC_INPUT_CHECK(nf90_get_var(heat_ncid, heat_id_varid, heat_ids), 'read heat ids')
+
+        ! Validate that the flow time dimension is long enough for the requested run.
+        ! The flow variable is indexed as (id, time), so the time dimension is the 2nd one.
+        call NC_INPUT_CHECK(nf90_inquire_variable(flow_ncid, flow_varid, ndims=var_ndims, &
+            dimids=var_dimids), 'inquire flow variable dimensions')
+        if (var_ndims .lt. 2) then
+            write(*,*) 'NetCDF input error: flow variable ', trim(control_flow_var), &
+                ' must have at least 2 dimensions (id, time)'
+            stop
+        end if
+        call NC_INPUT_CHECK(nf90_inquire_dimension(flow_ncid, var_dimids(2), len=ntime), &
+            'read flow time dimension length')
+        read(control_start_date,'(i4,2i2)') sy, sm, sd
+        read(control_end_date,  '(i4,2i2)') ey, em, ed
+        ndays_needed = Julian(ey,em,ed) - Julian(sy,sm,sd) + 1
+        if (ntime .lt. ndays_needed) then
+            write(*,*) 'NetCDF input error: flow time dimension (', ntime, &
+                ') is shorter than the requested simulation length (', ndays_needed, ' days)'
+            stop
+        end if
+
+        ! Startup provenance summary for the netCDF forcing input mode.
+        write(*,*) '------------------------------------------------------------'
+        write(*,*) 'NetCDF forcing input mode'
+        write(*,*) '  Flow file        : ', trim(control_flow_file)
+        write(*,*) '  Heat file        : ', trim(control_heat_file)
+        write(*,*) '  Flow variable    : ', trim(control_flow_var)
+        write(*,*) '  Flow id variable : ', trim(control_flow_id_var)
+        write(*,*) '  Heat id variable : ', trim(control_heat_id_var)
+        write(*,*) '  Heat variables   : ', trim(control_heat_tair_var), ' ', &
+            trim(control_heat_vp_var), ' ', trim(control_heat_sw_var), ' ', &
+            trim(control_heat_lw_var), ' ', trim(control_heat_press_var), ' ', &
+            trim(control_heat_wind_var)
+        write(*,*) '  Number of flow IDs : ', nflow
+        write(*,*) '  Number of heat IDs : ', nheat
+        write(*,*) '  Flow time steps    : ', ntime, ' (need ', ndays_needed, ')'
+        write(*,*) '  First cell-to-ID mappings (cell, hru_id, flow_idx, heat_idx):'
+        ncheck = min(5, heat_cells)
+        do i = 1, ncheck
+            f_idx = FIND_FLOW_INDEX(hru_id(i))
+            h_idx = FIND_HEAT_INDEX(hru_id(i))
+            write(*,'(A,4I12)') '    ', i, hru_id(i), f_idx, h_idx
+        end do
+        write(*,*) '  WARNING: Q_local and Q_diff are set to 0 in netCDF input mode.'
+        write(*,*) '           Results may differ from ASCII runs that include'
+        write(*,*) '           local/differential flow terms.'
+        write(*,*) '------------------------------------------------------------'
+
         nc_forcing_open = .true.
     end subroutine NC_INPUT_INIT
 
@@ -227,7 +279,7 @@ contains
         integer :: i
 
         do i = 1, size(flow_ids)
-            if (flow_ids(i) .eq. id) then
+            if (flow_ids(i) .eq. int(id, kind=8)) then
                 FIND_FLOW_INDEX = i
                 return
             end if
