@@ -107,23 +107,72 @@ SUBROUTINE CHECK_CONTROL(control_file)
     implicit none
     !
     character(len=*), intent(in) :: control_file
+    logical :: VALID_DATE
     !
+    ! <input_format> must be a supported value. Checked first so that the
+    ! forcing-file diagnostics below can be tailored to the selected mode.
+    if (TRIM(control_input_format) .ne. "ascii" .and. &
+        TRIM(control_input_format) .ne. "netcdf") then
+        write(*,*) "Invalid <input_format> in ",TRIM(control_file),": '", &
+            TRIM(control_input_format),"' (must be 'ascii' or 'netcdf')"
+        stop
+    end if
+    !
+    ! Required keys common to every input format.
     if (LEN_TRIM(control_network_file) .eq. 0) call MISSING_CONTROL(control_file,"network_file")
-    if (LEN_TRIM(control_flow_file) .eq. 0) call MISSING_CONTROL(control_file,"flow_file")
-    if (LEN_TRIM(control_heat_file) .eq. 0) call MISSING_CONTROL(control_file,"heat_file")
+    if (LEN_TRIM(control_output_prefix) .eq. 0) call MISSING_CONTROL(control_file,"output_prefix")
+    if (LEN_TRIM(control_start_date) .eq. 0) call MISSING_CONTROL(control_file,"start_date")
+    if (LEN_TRIM(control_end_date) .eq. 0) call MISSING_CONTROL(control_file,"end_date")
+    !
+    ! Forcing inputs are required in both modes; only their meaning differs.
+    if (TRIM(control_input_format) .eq. "netcdf") then
+        if (LEN_TRIM(control_flow_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"flow_file (netCDF flow forcing path)")
+        if (LEN_TRIM(control_heat_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"heat_file (netCDF heat forcing path)")
+    else
+        if (LEN_TRIM(control_flow_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"flow_file (ASCII flow forcing path)")
+        if (LEN_TRIM(control_heat_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"heat_file (ASCII heat forcing path)")
+    end if
+    !
+    ! Reservoir inputs (existing requirement, unchanged).
     if (LEN_TRIM(control_reservoir_file) .eq. 0) call MISSING_CONTROL(control_file,"reservoir_file")
     if (LEN_TRIM(control_reservoir_storage_file) .eq. 0) &
         call MISSING_CONTROL(control_file,"reservoir_storage_file")
     if (LEN_TRIM(control_reservoir_sel_withdraw_file) .eq. 0) &
         call MISSING_CONTROL(control_file,"reservoir_sel_withdraw_file")
-    if (LEN_TRIM(control_output_prefix) .eq. 0) call MISSING_CONTROL(control_file,"output_prefix")
-    if (LEN_TRIM(control_start_date) .eq. 0) call MISSING_CONTROL(control_file,"start_date")
-    if (LEN_TRIM(control_end_date) .eq. 0) call MISSING_CONTROL(control_file,"end_date")
-    if (TRIM(control_input_format) .ne. "ascii" .and. TRIM(control_input_format) .ne. "netcdf") then
-        write(*,*) "Unsupported <input_format>: ",TRIM(control_input_format)
+    !
+    ! Dates must be 8-digit YYYYMMDD (read downstream as (i4,2i2)).
+    if (.not. VALID_DATE(control_start_date)) &
+        call BAD_DATE(control_file,"start_date",control_start_date)
+    if (.not. VALID_DATE(control_end_date)) &
+        call BAD_DATE(control_file,"end_date",control_end_date)
+    !
+    ! end_date must not precede start_date. Both are 8-char YYYYMMDD, so a
+    ! lexical comparison is also a chronological one.
+    if (control_end_date .lt. control_start_date) then
+        write(*,*) "Invalid date range in ",TRIM(control_file),": end_date ", &
+            TRIM(control_end_date)," is earlier than start_date ",TRIM(control_start_date)
         stop
     end if
 END SUBROUTINE CHECK_CONTROL
+
+LOGICAL FUNCTION VALID_DATE(value)
+    implicit none
+    !
+    character(len=*), intent(in) :: value
+    integer :: i,ic
+    !
+    VALID_DATE = .FALSE.
+    if (LEN_TRIM(value) .ne. 8) return
+    do i = 1,8
+        ic = ICHAR(value(i:i))
+        if (ic .lt. ICHAR("0") .or. ic .gt. ICHAR("9")) return
+    end do
+    VALID_DATE = .TRUE.
+END FUNCTION VALID_DATE
 
 SUBROUTINE MISSING_CONTROL(control_file,name)
     implicit none
@@ -133,3 +182,13 @@ SUBROUTINE MISSING_CONTROL(control_file,name)
     write(*,*) "Missing required control variable in ",TRIM(control_file),": ",TRIM(name)
     stop
 END SUBROUTINE MISSING_CONTROL
+
+SUBROUTINE BAD_DATE(control_file,name,value)
+    implicit none
+    !
+    character(len=*), intent(in) :: control_file,name,value
+    !
+    write(*,*) "Invalid ",TRIM(name)," in ",TRIM(control_file),": '",TRIM(value), &
+        "' (expected 8-digit YYYYMMDD)"
+    stop
+END SUBROUTINE BAD_DATE
