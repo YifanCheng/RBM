@@ -8,7 +8,7 @@
 objects = rbm10_VIC.o Begin.o Systmm.o Particle_Track.o \
           Energy.o Julian.o tntrp.o Read_Forcing.o \
           Block_Energy.o Block_Hydro.o Block_Network.o \
-          data_type.o Block_Reservoir.o \
+          data_type.o Block_Reservoir.o Block_Control.o Read_Control.o \
           density_subroutine.o flow_subroutine.o \
           Error_estimate.o \
           reservoir_subroutine_implicit.o \
@@ -16,7 +16,7 @@ objects = rbm10_VIC.o Begin.o Systmm.o Particle_Track.o \
 objects_nc = rbm10_VIC.o Begin.o Systmm_nc.o Particle_Track.o \
           Energy.o Julian.o tntrp.o Read_Forcing.o \
           Block_Energy.o Block_Hydro.o Block_Network.o \
-          data_type.o Block_Reservoir.o \
+          data_type.o Block_Reservoir.o Block_Control.o Read_Control.o \
           density_subroutine.o flow_subroutine.o \
           Error_estimate.o \
           reservoir_subroutine_implicit.o \
@@ -52,7 +52,12 @@ Block_Reservoir.o: data_type.mod Block_Reservoir.f90
 	$(f90comp) -c Block_Reservoir.f90
 block_reservoir.mod: data_type.mod Block_Reservoir.o Block_Reservoir.f90
 	$(f90comp) -c Block_Reservoir.f90
-Begin.o: block_energy.mod block_hydro.mod block_network.mod block_reservoir.mod Begin.f90
+Block_Control.o: Block_Control.f90
+	$(f90comp) -c Block_Control.f90
+block_control.mod: Block_Control.o
+Read_Control.o: block_control.mod Read_Control.f90
+	$(f90comp) -c Read_Control.f90
+Begin.o: block_energy.mod block_hydro.mod block_network.mod block_reservoir.mod block_control.mod Begin.f90
 	$(f90comp) -c Begin.f90
 Read_Forcing.o: block_energy.mod block_hydro.mod block_network.mod block_reservoir.mod Read_Forcing.f90
 	$(f90comp) -c Read_Forcing.f90 
@@ -85,12 +90,13 @@ tntrp.o: tntrp.f90
 	$(f90comp) -c tntrp.f90
 Water_Balance.o: block_hydro.mod block_network.mod Water_Balance.f90
 	$(f90comp) -c Water_Balance.f90
-rbm10_VIC.o: rbm10_VIC.f90
+rbm10_VIC.o: block_control.mod rbm10_VIC.f90
 	$(f90comp) -c rbm10_VIC.f90
 
 # Cleaning everything
 clean:
-	rm block_energy.mod block_hydro.mod block_network.mod block_reservoir.mod \
+	rm -f block_energy.mod block_hydro.mod block_network.mod block_reservoir.mod \
+           block_control.mod \
            rbm10_VIC
-	rm $(objects)
+	rm -f $(objects)
 	rm -f rbm10_VIC_nc Systmm_nc.o Write_nc.o Netcdf_Output.o netcdf_output.mod

@@ -40,6 +40,7 @@ PROGRAM RBM10_VIC
     !use BGIN
     !use SYSTM
     !
+    use Block_Control
     implicit none
     !
     !
@@ -55,6 +56,7 @@ PROGRAM RBM10_VIC
     character (len=200 ):: reservoir_file
     character (len=200 ):: reservoir_storage_file
     character (len=200 ):: reservoir_sel_withdraw_file
+    character (len=200 ):: control_file
     character (len=8)   :: start_data,end_data
     integer iargc
     integer numarg
@@ -62,23 +64,30 @@ PROGRAM RBM10_VIC
     ! Command line input
     !
     numarg = iargc ( )
-    if (numarg .lt. 2) then
-        write (*,*) 'Too few arguments were given'
+    if (numarg .ne. 1 .and. numarg .ne. 2) then
+        write (*,*) 'Invalid number of arguments'
         write (*,*) ' '
-        write (*,*) 'First:  Location and prefix of input files'
-        write (*,*) '        (networkfile and parameterfile)'
-        write (*,*) 'Second: Location and prefix of output files'
-        write (*,*) ' '
-        write (*,*) 'eg: $ <program-name> ./input/Salmon_0.50 ./output/Salmon_Test'
+        write (*,*) 'Legacy mode:'
+        write (*,*) '  $ <program-name> <input_prefix> <output_prefix>'
+        write (*,*) 'Control-file mode:'
+        write (*,*) '  $ <program-name> <control_file>'
         write (*,*) ' '
         stop
     end if
-    call getarg ( 1, inPrefix )
-    call getarg ( 2, outPrefix )
+    if (numarg .eq. 1) then
+        call getarg ( 1, control_file )
+        call READ_CONTROL(control_file)
+        net_file = control_network_file
+        outPrefix = control_output_prefix
+        inPrefix = ''
+    else
+        call getarg ( 1, inPrefix )
+        call getarg ( 2, outPrefix )
+        net_file = TRIM(inPrefix)//'_Network'
+    end if
     !
     ! Identify input/output files
     !
-    net_file      = TRIM(inPrefix)//'_Network'
     param_file    = TRIM(inPrefix)//'_Parameters'
     spatial_file  = TRIM(outPrefix)//'.Spat'
     temp_file     = TRIM(outPrefix)//'.Temp'
@@ -95,32 +104,40 @@ PROGRAM RBM10_VIC
     !     Read header information from control file
     !
     read(90,*)
-    read(90,'(A)') flow_file
+    if (control_file_mode) then
+        read(90,'(A)')
+        read(90,'(A)')
+        read(90,'(A)')
+        read(90,'(A)')
+        read(90,'(A)')
+        flow_file = control_flow_file
+        heat_file = control_heat_file
+        reservoir_file = control_reservoir_file
+        reservoir_storage_file = control_reservoir_storage_file
+        reservoir_sel_withdraw_file = control_reservoir_sel_withdraw_file
+    else
+        read(90,'(A)') flow_file
+        read(90,'(A)') heat_file
+        read(90,'(A)') reservoir_file
+        read(90,'(A)') reservoir_storage_file
+        read(90,'(A)') reservoir_sel_withdraw_file
+    end if
     !
     !     Open file with hydrologic data
     !
     open(unit=35,FILE=TRIM(flow_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     !
-    !
-    read(90,'(A)') heat_file
-    !
     !     Open file with meteorologic data
     !
     open(unit=36,FILE=TRIM(heat_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
-    !
-    read(90,'(A)') reservoir_file
     !
     !     Open file with reservoir parameters
     !
     open(unit=37,FILE=TRIM(reservoir_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     !
-    read(90,'(A)') reservoir_storage_file
-    !
     !     Open file with reservoir storage data
     !
     open(unit=38,FILE=TRIM(reservoir_storage_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
-    !
-    read(90,'(A)') reservoir_sel_withdraw_file
     !
     !     Open file with reservoir selective withdrawal data
     !

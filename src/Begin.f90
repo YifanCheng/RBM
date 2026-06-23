@@ -4,6 +4,7 @@ Subroutine BEGIN(param_file,spatial_file)
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use Block_Control
     !
     implicit none
     !
@@ -33,6 +34,10 @@ Subroutine BEGIN(param_file,spatial_file)
     !     Card Group I
     !
     read(90,*) start_date,end_date
+    if (control_file_mode) then
+        start_date = control_start_date
+        end_date = control_end_date
+    end if
     read(start_date,'(i4,2i2)') start_year,start_month,start_day
     read(end_date,  '(i4,2i2)') end_year,end_month,end_day
     nyear1=start_year
@@ -45,6 +50,12 @@ Subroutine BEGIN(param_file,spatial_file)
     jul_start = Julian(start_year,start_month,start_day)
     !
     read(90,*) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+    if (control_file_mode) then
+        source = control_source
+        reservoir = control_reservoir
+        nres = control_nres
+        select_withdraw = control_select_withdraw
+    end if
     !
     ! Allocate dynamic arrays
     !
