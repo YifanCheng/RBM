@@ -1,5 +1,8 @@
 SUBROUTINE WRITE(time,nd,nr,ncell,ns,T_0,T_head,dbt,Q_inflow,Q_outflow)
 !
+#ifdef USE_NETCDF
+use Netcdf_Output
+#endif
 Implicit NONE
 !
 integer :: nd,nr,ncell,ns 
@@ -11,4 +14,7 @@ real    :: dbt
 !
 write (20,'(f12.4,4i6,3f8.2,4f25.1,f8.1,f8.4)')           &
             time,nd,nr,ncell,ns,T_0,T_head,dbt,Q_inflow,Q_outflow
+#ifdef USE_NETCDF
+call NC_OUTPUT_WRITE(time,nd,nr,ncell,ns,T_0,T_head,dbt,Q_inflow,Q_outflow)
+#endif
 end SUBROUTINE WRITE

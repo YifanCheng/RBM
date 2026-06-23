@@ -5,6 +5,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     use Block_Network
     use Block_Reservoir
     use data_type
+#ifdef USE_NETCDF
+    use Netcdf_Output
+#endif
     !
     Implicit None
     !
@@ -146,6 +149,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !     open the output file
     !
     open(20,file=TRIM(temp_file),status='unknown')
+#ifdef USE_NETCDF
+    call NC_OUTPUT_INIT(TRIM(temp_file)//'.nc')
+#endif
     !
     !
     ! Initialize dummy counters that facilitate updating simulated values
@@ -641,5 +647,8 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !                        return to rmain
     !     ******************************************************
     !
+#ifdef USE_NETCDF
+    call NC_OUTPUT_CLOSE()
+#endif
 950 return
 end SUBROUTINE SYSTMM
