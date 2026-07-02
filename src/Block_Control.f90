@@ -19,6 +19,9 @@ Module Block_Control
     integer :: control_nres = 0
     logical :: control_select_withdraw = .FALSE.
     character(len=32) :: control_input_format = "ascii"
+    character(len=32) :: control_output_format = ""
+    logical :: control_write_ascii = .TRUE.
+    logical :: control_write_netcdf = .FALSE.
     character(len=64) :: control_flow_var = "KWroutedRunoff"
     character(len=64) :: control_flow_id_var = "reachID"
     character(len=64) :: control_heat_id_var = "hruId"

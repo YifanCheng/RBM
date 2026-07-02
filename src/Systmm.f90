@@ -150,9 +150,19 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !
     !     open the output file
     !
-    open(20,file=TRIM(temp_file),status='unknown')
+    if (control_write_ascii) then
+        open(20,file=TRIM(temp_file),status='unknown')
+    end if
 #ifdef USE_NETCDF
-    call NC_OUTPUT_INIT(TRIM(temp_file)//'.nc')
+    if (control_write_netcdf) then
+        call NC_OUTPUT_INIT(TRIM(temp_file)//'.nc')
+    end if
+#else
+    if (control_write_netcdf) then
+        write(*,*) "netCDF output requested, but this executable was built without netCDF support."
+        write(*,*) "Build and run rbm10_VIC_nc, or set <output_format> ascii."
+        stop
+    end if
 #endif
     !
     !
@@ -656,7 +666,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !     ******************************************************
     !
 #ifdef USE_NETCDF
-    call NC_OUTPUT_CLOSE()
+    if (control_write_netcdf) then
+        call NC_OUTPUT_CLOSE()
+    end if
 #endif
 950 return
 end SUBROUTINE SYSTMM

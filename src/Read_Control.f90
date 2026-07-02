@@ -65,6 +65,8 @@ SUBROUTINE SET_CONTROL_VALUE(name,value)
         control_select_withdraw = CONTROL_LOGICAL(value)
     case ("input_format")
         control_input_format = TRIM(value)
+    case ("output_format")
+        control_output_format = TRIM(value)
     case ("flow_var")
         control_flow_var = TRIM(value)
     case ("flow_id_var")
@@ -117,6 +119,20 @@ SUBROUTINE CHECK_CONTROL(control_file)
             TRIM(control_input_format),"' (must be 'ascii' or 'netcdf')"
         stop
     end if
+    if (LEN_TRIM(control_output_format) .eq. 0) then
+        control_output_format = control_input_format
+    end if
+    if (TRIM(control_output_format) .ne. "ascii" .and. &
+        TRIM(control_output_format) .ne. "netcdf" .and. &
+        TRIM(control_output_format) .ne. "both") then
+        write(*,*) "Invalid <output_format> in ",TRIM(control_file),": '", &
+            TRIM(control_output_format),"' (must be 'ascii', 'netcdf', or 'both')"
+        stop
+    end if
+    control_write_ascii = (TRIM(control_output_format) .eq. "ascii" .or. &
+        TRIM(control_output_format) .eq. "both")
+    control_write_netcdf = (TRIM(control_output_format) .eq. "netcdf" .or. &
+        TRIM(control_output_format) .eq. "both")
     !
     ! Required keys common to every input format.
     if (LEN_TRIM(control_network_file) .eq. 0) call MISSING_CONTROL(control_file,"network_file")

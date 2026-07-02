@@ -104,7 +104,7 @@ contains
         ncheck = min(5, heat_cells)
         do i = 1, ncheck
             f_idx = FIND_FLOW_INDEX(hru_id(i))
-            h_idx = FIND_HEAT_INDEX(hru_id(i))
+            h_idx = FIND_FLOW_INDEX(hru_id(i))
             write(*,'(A,4I12)') '    ', i, hru_id(i), f_idx, h_idx
         end do
         write(*,*) '  WARNING: Q_local and Q_diff are set to 0 in netCDF input mode.'
@@ -156,7 +156,6 @@ contains
                 call READ_FLOW_CELL(ndays, ncell, q_cfs, q_unused, Q_diff(no_heat), depth(no_heat), &
                     width(no_heat), u(no_heat), Q_local(no_heat))
                 Q_out(no_heat) = q_cfs
-                call APPLY_FLOW_LIMITS(no_heat, min_flow, min_depth)
                 Q_trib(nr) = 0
                 Q_in(no_heat) = Q_out(no_heat-1)
                 dt(no_heat) = dx(ncell)/u(no_heat)
@@ -223,7 +222,7 @@ contains
         integer :: heat_idx
         character(len=120) :: context
 
-        heat_idx = FIND_HEAT_INDEX(hru_id(cell_index))
+        heat_idx = FIND_FLOW_INDEX(hru_id(cell_index))
         write(context,'(A,I0,A,I0,A,I0)') 'read heat value day=',day_index,' cell=',cell_index,' heat_idx=',heat_idx
         call READ_NC_REAL(heat_ncid, tair_varid, day_index, heat_idx, dbt(cell_index), 1, trim(context))
         call READ_NC_REAL(heat_ncid, vp_varid, day_index, heat_idx, ea(cell_index), 1, trim(context))
@@ -304,17 +303,23 @@ contains
 
     real function ROUND1(value)
         real, intent(in) :: value
-        ROUND1 = real(nint(value*10.0))/10.0
+        character(len=32) :: buffer
+        write(buffer,'(f20.1)') value
+        read(buffer,*) ROUND1
     end function ROUND1
 
     real function ROUND2(value)
         real, intent(in) :: value
-        ROUND2 = real(nint(value*100.0))/100.0
+        character(len=32) :: buffer
+        write(buffer,'(f20.2)') value
+        read(buffer,*) ROUND2
     end function ROUND2
 
     real function ROUND4(value)
         real, intent(in) :: value
-        ROUND4 = real(nint(value*10000.0))/10000.0
+        character(len=32) :: buffer
+        write(buffer,'(f20.4)') value
+        read(buffer,*) ROUND4
     end function ROUND4
 
 end module Netcdf_Input

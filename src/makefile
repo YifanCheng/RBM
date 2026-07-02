@@ -63,17 +63,17 @@ Read_Forcing.o: block_energy.mod block_hydro.mod block_network.mod block_reservo
 	$(f90comp) -cpp -c Read_Forcing.f90 
 Read_Forcing_nc.o: block_energy.mod block_hydro.mod block_network.mod block_reservoir.mod block_control.mod netcdf_input.mod Read_Forcing.f90
 	$(f90comp) -cpp -DUSE_NETCDF $(NC_FFLAGS) -c Read_Forcing.f90 -o Read_Forcing_nc.o
-Systmm.o: block_network.mod block_energy.mod block_hydro.mod block_reservoir.mod Systmm.f90
+Systmm.o: block_network.mod block_energy.mod block_hydro.mod block_reservoir.mod block_control.mod Systmm.f90
 	$(f90comp) -cpp -c Systmm.f90
-Systmm_nc.o: block_network.mod block_energy.mod block_hydro.mod block_reservoir.mod netcdf_output.mod Systmm.f90
+Systmm_nc.o: block_network.mod block_energy.mod block_hydro.mod block_reservoir.mod block_control.mod netcdf_output.mod Systmm.f90
 	$(f90comp) -cpp -DUSE_NETCDF $(NC_FFLAGS) -c Systmm.f90 -o Systmm_nc.o
 Energy.o: block_energy.mod Energy.f90
 	$(f90comp) -c Energy.f90
 Particle_Track.o: block_hydro.mod block_network.mod block_reservoir.mod Particle_Track.f90
 	$(f90comp) -c Particle_Track.f90
-Write.o: Write.f90
+Write.o: block_control.mod Write.f90
 	$(f90comp) -cpp -c Write.f90
-Write_nc.o: netcdf_output.mod Write.f90
+Write_nc.o: block_control.mod netcdf_output.mod Write.f90
 	$(f90comp) -cpp -DUSE_NETCDF $(NC_FFLAGS) -c Write.f90 -o Write_nc.o
 Netcdf_Output.o: Netcdf_Output.f90
 	$(f90comp) $(NC_FFLAGS) -c Netcdf_Output.f90
