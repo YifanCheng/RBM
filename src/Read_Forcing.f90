@@ -4,6 +4,10 @@ SUBROUTINE Read_Forcing
     USE Block_Hydro
     USE Block_Network
     USE Block_Reservoir
+    USE Block_Control
+#ifdef USE_NETCDF
+    USE Netcdf_Input
+#endif
     !
     IMPLICIT NONE
     !
@@ -13,6 +17,16 @@ SUBROUTINE Read_Forcing
     real    :: z_temp,w_temp
     real    :: min_flow = 5.0
     real    :: min_depth = 5.0
+    !
+    if (TRIM(control_input_format) .eq. "netcdf") then
+#ifdef USE_NETCDF
+        call READ_FORCING_NETCDF()
+#else
+        write(*,*) "NetCDF input requires rbm10_VIC_nc."
+        stop
+#endif
+        return
+    end if
     !
     n1=1
     n2=2

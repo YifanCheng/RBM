@@ -4,6 +4,7 @@ Subroutine BEGIN(param_file,spatial_file)
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use Block_Control
     !
     implicit none
     !
@@ -16,6 +17,7 @@ Subroutine BEGIN(param_file,spatial_file)
     integer:: head_name,trib_cell
     integer:: jul_start,main_stem,nyear1,nyear2,nc,ncell,nseg
     integer:: ns_max_test,node,ncol,nrow,nr,cum_sgmnt
+    integer:: lat_id
     !
     integer:: nreservoir,nseg_temp,nseg_cum
     !
@@ -33,6 +35,10 @@ Subroutine BEGIN(param_file,spatial_file)
     !     Card Group I
     !
     read(90,*) start_date,end_date
+    if (control_file_mode) then
+        start_date = control_start_date
+        end_date = control_end_date
+    end if
     read(start_date,'(i4,2i2)') start_year,start_month,start_day
     read(end_date,  '(i4,2i2)') end_year,end_month,end_day
     nyear1=start_year
@@ -45,6 +51,12 @@ Subroutine BEGIN(param_file,spatial_file)
     jul_start = Julian(start_year,start_month,start_day)
     !
     read(90,*) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+    if (control_file_mode) then
+        source = control_source
+        reservoir = control_reservoir
+        nres = control_nres
+        select_withdraw = control_select_withdraw
+    end if
     !
     ! Allocate dynamic arrays
     !
@@ -67,6 +79,7 @@ Subroutine BEGIN(param_file,spatial_file)
     conflnce=0
     allocate(reach_cell(nreach,ns_max))
     allocate(head_cell(nreach))
+    allocate(hru_id(heat_cells))
     allocate(segment_cell(nreach,ns_max))
     allocate(x_dist(nreach,0:ns_max))
     !
@@ -178,6 +191,8 @@ Subroutine BEGIN(param_file,spatial_file)
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0,i6)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
                 !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
+                read(lat,*) lat_id
+                hru_id(ncell)=lat_id
                 if(res_num(ncell) .gt. 0) then
                     res_pres(ncell) = .TRUE.
                 end if
@@ -185,6 +200,8 @@ Subroutine BEGIN(param_file,spatial_file)
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
                 !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
+                read(lat,*) lat_id
+                hru_id(ncell)=lat_id
             end if
             !
             !    Set the number of segments of the default, if not specified
@@ -217,12 +234,14 @@ Subroutine BEGIN(param_file,spatial_file)
         !
         !   Write Segment List for mapping to temperature output (UW_JRY_2008/11/19)
         !
-        do nseg_temp=1,nseg_out_num
-            if (nseg_out(nr,ncell,nseg_temp).eq.nseg) then
-                open(22,file=TRIM(spatial_file),status='unknown') ! (changed by WUR_WF_MvV_2011/01/05)
-                write(22,'(4i6,1x,a8,1x,a10,i5)') nr,ncell,nrow,ncol,lat,long,nseg_temp
-            end if
-        end do
+        if (control_write_ascii) then
+            do nseg_temp=1,nseg_out_num
+                if (nseg_out(nr,ncell,nseg_temp).eq.nseg) then
+                    open(22,file=TRIM(spatial_file),status='unknown') ! (changed by WUR_WF_MvV_2011/01/05)
+                    write(22,'(4i6,1x,a8,1x,a10,i5)') nr,ncell,nrow,ncol,lat,long,nseg_temp
+                end if
+            end do
+        end if
         !
         !
         !
