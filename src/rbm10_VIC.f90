@@ -105,11 +105,6 @@ PROGRAM RBM10_VIC
     !
     read(90,*)
     if (control_file_mode) then
-        read(90,'(A)')
-        read(90,'(A)')
-        read(90,'(A)')
-        read(90,'(A)')
-        read(90,'(A)')
         flow_file = control_flow_file
         heat_file = control_heat_file
         reservoir_file = control_reservoir_file

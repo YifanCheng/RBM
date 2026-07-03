@@ -11,6 +11,7 @@ Subroutine BEGIN(param_file,spatial_file)
     character (len=8) :: end_date,start_date     
     character (len=8) :: lat
     character (len=10):: long
+    character (len=512):: network_line
     character (len=200):: param_file,source_file,spatial_file
     !
     integer:: Julian
@@ -20,6 +21,7 @@ Subroutine BEGIN(param_file,spatial_file)
     integer:: lat_id
     !
     integer:: nreservoir,nseg_temp,nseg_cum
+    integer:: ios
     !
     logical:: first_cell,source
     !
@@ -34,10 +36,11 @@ Subroutine BEGIN(param_file,spatial_file)
     !
     !     Card Group I
     !
-    read(90,*) start_date,end_date
     if (control_file_mode) then
         start_date = control_start_date
         end_date = control_end_date
+    else
+        read(90,*) start_date,end_date
     end if
     read(start_date,'(i4,2i2)') start_year,start_month,start_day
     read(end_date,  '(i4,2i2)') end_year,end_month,end_day
@@ -50,7 +53,26 @@ Subroutine BEGIN(param_file,spatial_file)
     !
     jul_start = Julian(start_year,start_month,start_day)
     !
-    read(90,*) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+    if (control_file_mode) then
+        do
+            read(90,'(A)',iostat=ios) network_line
+            if (ios .ne. 0) then
+                write(*,*) 'Could not find network counts in control-file network file.'
+                write(*,*) 'Expected: nreach flow_cells heat_cells source reservoir nres [select_withdraw]'
+                stop
+            end if
+            network_line = ADJUSTL(network_line)
+            if (LEN_TRIM(network_line) .eq. 0) cycle
+            if (network_line(1:1) .lt. '0' .or. network_line(1:1) .gt. '9') cycle
+            read(network_line,*,iostat=ios) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+            if (ios .eq. 0) exit
+            select_withdraw = .FALSE.
+            read(network_line,*,iostat=ios) nreach,flow_cells,heat_cells,source,reservoir,nres
+            if (ios .eq. 0) exit
+        end do
+    else
+        read(90,*) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+    end if
     if (control_file_mode) then
         source = control_source
         reservoir = control_reservoir

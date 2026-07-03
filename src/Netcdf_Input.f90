@@ -21,6 +21,7 @@ module Netcdf_Input
     integer(kind=8), allocatable :: flow_ids(:)
     integer(kind=8), allocatable :: heat_ids(:)
     logical :: nc_forcing_open = .false.
+    logical :: raw_heat_schema = .false.
 
 contains
 
@@ -38,6 +39,7 @@ contains
         integer :: dimid, nflow, nheat
         integer :: var_ndims, var_dimids(nf90_max_var_dims), ntime
         integer :: sy, sm, sd, ey, em, ed, ndays_needed, i, ncheck
+        integer :: status
         integer :: f_idx, h_idx
         integer, external :: Julian
 
@@ -48,12 +50,24 @@ contains
         call NC_INPUT_CHECK(nf90_inq_varid(flow_ncid, trim(control_flow_var), flow_varid), 'find flow variable')
         call NC_INPUT_CHECK(nf90_inq_varid(flow_ncid, trim(control_flow_id_var), flow_id_varid), 'find flow id variable')
         call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_id_var), heat_id_varid), 'find heat id variable')
-        call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_tair_var), tair_varid), 'find air temperature')
-        call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_vp_var), vp_varid), 'find vapor pressure')
-        call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_sw_var), sw_varid), 'find shortwave')
-        call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_lw_var), lw_varid), 'find longwave')
-        call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_press_var), press_varid), 'find air pressure')
-        call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_wind_var), wind_varid), 'find wind')
+
+        status = nf90_inq_varid(heat_ncid, trim(control_heat_tair_var), tair_varid)
+        raw_heat_schema = (status .ne. nf90_noerr .or. trim(control_heat_tair_var) .eq. 'TSA')
+        if (raw_heat_schema) then
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, 'TSA', tair_varid), 'find raw air temperature TSA')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, 'RH2M', vp_varid), 'find raw relative humidity RH2M')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, 'FSDS', sw_varid), 'find raw shortwave FSDS')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, 'FLDS', lw_varid), 'find raw longwave FLDS')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, 'PBOT', press_varid), 'find raw air pressure PBOT')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, 'U10', wind_varid), 'find raw wind U10')
+        else
+            call NC_INPUT_CHECK(status, 'find air temperature')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_vp_var), vp_varid), 'find vapor pressure')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_sw_var), sw_varid), 'find shortwave')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_lw_var), lw_varid), 'find longwave')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_press_var), press_varid), 'find air pressure')
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_wind_var), wind_varid), 'find wind')
+        end if
 
         call NC_INPUT_CHECK(nf90_inq_dimid(flow_ncid, 'seg', dimid), 'find flow seg dimension')
         call NC_INPUT_CHECK(nf90_inquire_dimension(flow_ncid, dimid, len=nflow), 'read flow seg length')
@@ -93,10 +107,15 @@ contains
         write(*,*) '  Flow variable    : ', trim(control_flow_var)
         write(*,*) '  Flow id variable : ', trim(control_flow_id_var)
         write(*,*) '  Heat id variable : ', trim(control_heat_id_var)
-        write(*,*) '  Heat variables   : ', trim(control_heat_tair_var), ' ', &
-            trim(control_heat_vp_var), ' ', trim(control_heat_sw_var), ' ', &
-            trim(control_heat_lw_var), ' ', trim(control_heat_press_var), ' ', &
-            trim(control_heat_wind_var)
+        if (raw_heat_schema) then
+            write(*,*) '  Heat schema      : raw CLM variables (TSA/RH2M/FSDS/FLDS/PBOT/U10)'
+        else
+            write(*,*) '  Heat schema      : converted RBM variables'
+            write(*,*) '  Heat variables   : ', trim(control_heat_tair_var), ' ', &
+                trim(control_heat_vp_var), ' ', trim(control_heat_sw_var), ' ', &
+                trim(control_heat_lw_var), ' ', trim(control_heat_press_var), ' ', &
+                trim(control_heat_wind_var)
+        end if
         write(*,*) '  Number of flow IDs : ', nflow
         write(*,*) '  Number of heat IDs : ', nheat
         write(*,*) '  Flow time steps    : ', ntime, ' (need ', ndays_needed, ')'
@@ -224,14 +243,59 @@ contains
 
         heat_idx = FIND_FLOW_INDEX(hru_id(cell_index))
         write(context,'(A,I0,A,I0,A,I0)') 'read heat value day=',day_index,' cell=',cell_index,' heat_idx=',heat_idx
-        call READ_NC_REAL(heat_ncid, tair_varid, day_index, heat_idx, dbt(cell_index), 1, trim(context))
-        call READ_NC_REAL(heat_ncid, vp_varid, day_index, heat_idx, ea(cell_index), 1, trim(context))
-        call READ_NC_REAL(heat_ncid, sw_varid, day_index, heat_idx, Q_ns(cell_index), 4, trim(context))
-        call READ_NC_REAL(heat_ncid, lw_varid, day_index, heat_idx, Q_na(cell_index), 4, trim(context))
-        rho = 1.225
-        call READ_NC_REAL(heat_ncid, press_varid, day_index, heat_idx, press(cell_index), 1, trim(context))
-        call READ_NC_REAL(heat_ncid, wind_varid, day_index, heat_idx, wind(cell_index), 1, trim(context))
+        if (raw_heat_schema) then
+            call READ_RAW_HEAT_CELL(day_index, heat_idx, cell_index, trim(context))
+        else
+            call READ_NC_REAL(heat_ncid, tair_varid, day_index, heat_idx, dbt(cell_index), 1, trim(context))
+            call READ_NC_REAL(heat_ncid, vp_varid, day_index, heat_idx, ea(cell_index), 1, trim(context))
+            call READ_NC_REAL(heat_ncid, sw_varid, day_index, heat_idx, Q_ns(cell_index), 4, trim(context))
+            call READ_NC_REAL(heat_ncid, lw_varid, day_index, heat_idx, Q_na(cell_index), 4, trim(context))
+            rho = 1.225
+            call READ_NC_REAL(heat_ncid, press_varid, day_index, heat_idx, press(cell_index), 1, trim(context))
+            call READ_NC_REAL(heat_ncid, wind_varid, day_index, heat_idx, wind(cell_index), 1, trim(context))
+        end if
     end subroutine READ_HEAT_CELL
+
+
+    subroutine READ_RAW_HEAT_CELL(day_index, heat_idx, cell_index, context)
+        integer, intent(in) :: day_index, heat_idx, cell_index
+        character(len=*), intent(in) :: context
+        real :: tsa_k, rh_pct, fsds, flds, pbot, u10
+        real, parameter :: radiation_factor = 2.388e-4
+
+        call READ_NC_RAW(heat_ncid, tair_varid, day_index, heat_idx, tsa_k, context)
+        call READ_NC_RAW(heat_ncid, vp_varid, day_index, heat_idx, rh_pct, context)
+        call READ_NC_RAW(heat_ncid, sw_varid, day_index, heat_idx, fsds, context)
+        call READ_NC_RAW(heat_ncid, lw_varid, day_index, heat_idx, flds, context)
+        call READ_NC_RAW(heat_ncid, press_varid, day_index, heat_idx, pbot, context)
+        call READ_NC_RAW(heat_ncid, wind_varid, day_index, heat_idx, u10, context)
+
+        dbt(cell_index) = ROUND1(tsa_k - 273.15)
+        ea(cell_index) = ROUND1((rh_pct/100.0) * SATURATION_VAPOR_PRESSURE_MB(tsa_k))
+        Q_ns(cell_index) = ROUND4(fsds * radiation_factor)
+        Q_na(cell_index) = ROUND4(flds * radiation_factor)
+        rho = 1.225
+        press(cell_index) = ROUND1(pbot/100.0)
+        wind(cell_index) = ROUND1(u10)
+    end subroutine READ_RAW_HEAT_CELL
+
+    subroutine READ_NC_RAW(ncid, varid, day_index, id_index, value, context)
+        integer, intent(in) :: ncid, varid, day_index, id_index
+        character(len=*), intent(in) :: context
+        real, intent(out) :: value
+        real :: raw_values(1)
+
+        call NC_INPUT_CHECK(nf90_get_var(ncid, varid, raw_values, start=(/id_index, day_index/), &
+            count=(/1, 1/)), context)
+        value = raw_values(1)
+    end subroutine READ_NC_RAW
+
+    real function SATURATION_VAPOR_PRESSURE_MB(temp_k)
+        real, intent(in) :: temp_k
+        real :: temp_c
+        temp_c = temp_k - 273.15
+        SATURATION_VAPOR_PRESSURE_MB = 6.112 * exp(17.67 * temp_c / (temp_c + 243.5))
+    end function SATURATION_VAPOR_PRESSURE_MB
 
     subroutine READ_NC_REAL(ncid, varid, day_index, id_index, value, round_digits, context)
         integer, intent(in) :: ncid, varid, day_index, id_index, round_digits
