@@ -1,0 +1,49 @@
+! Example RBM control file for the integrated netCDF workflow.
+! Copy this file and replace the paths with local paths before running.
+!
+! Run with the netCDF-capable executable:
+!   ./rbm10_VIC_nc /path/to/example_netcdf_control_file.control
+!
+! For an ASCII-input run, set <input_format> ascii and point <flow_file>
+! and <heat_file> to the preprocessed ASCII forcing files.
+
+<network_file> /path/to/dises_77011225_Network
+<flow_file> /path/to/dises.test.09081000_77011225.h.2000.nc
+<heat_file> /path/to/DISES.default.clm2.h1a.09081000_77011225.2000.nc
+<reservoir_file> /path/to/routing_dummy.txt
+<reservoir_storage_file> /path/to/routing_dummy
+<reservoir_sel_withdraw_file> /path/to/reservoir_dummy
+<output_prefix> /path/to/output/dises_77011225_rbm
+
+<start_date> 20000101
+<end_date> 20001230
+<source> False
+<reservoir> False
+<nres> 0
+<select_withdraw> False
+
+! Input options: ascii | netcdf
+<input_format> netcdf
+
+! Output options: ascii | netcdf | both
+! If omitted, output_format defaults to input_format.
+<output_format> both
+
+! Flow netCDF variables.
+<flow_var> KWroutedRunoff
+<flow_id_var> reachID
+
+! Meteorology/heat netCDF ID variable.
+<heat_id_var> hruId
+
+! For RBM-ready converted meteorology netCDF files, use the default names:
+!   Tair_degC, vp_mb, SW_mmKs, LW_mmKs, P_mb, U10
+!
+! For raw CLM meteorology files, set heat_tair_var to TSA. RBM will then
+! read the raw CLM variables TSA, RH2M, FSDS, FLDS, PBOT, and U10.
+<heat_tair_var> TSA
+<heat_vp_var> vp_mb
+<heat_sw_var> SW_mmKs
+<heat_lw_var> LW_mmKs
+<heat_press_var> P_mb
+<heat_wind_var> U10
