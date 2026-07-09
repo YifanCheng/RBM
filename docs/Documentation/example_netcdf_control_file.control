@@ -7,9 +7,17 @@
 ! For an ASCII-input run, set <input_format> ascii and point <flow_file>
 ! and <heat_file> to the preprocessed ASCII forcing files.
 
-<network_file> /path/to/dises_77011225_Network
+! Topology input:
+!   Use <network_file> for the legacy ASCII Network file, or
+!   use <topology_file> for the new netCDF topology file.
+! Provide only one of these in a normal run.
+<topology_file> /path/to/dises_77011225_topology.nc
+! <network_file> /path/to/dises_77011225_Network
 <flow_file> /path/to/dises.test.09081000_77011225.h.2000.nc
 <heat_file> /path/to/DISES.default.clm2.h1a.09081000_77011225.2000.nc
+! Optional grid-to-HRU remapping weights for raw grid meteorology files.
+! Omit this when <heat_file> is already HRU/reach-remapped.
+! <heat_remap_file> /path/to/spatialweights_dises_09081000_77011225.nc
 <reservoir_file> /path/to/routing_dummy.txt
 <reservoir_storage_file> /path/to/routing_dummy
 <reservoir_sel_withdraw_file> /path/to/reservoir_dummy

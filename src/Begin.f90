@@ -5,6 +5,9 @@ Subroutine BEGIN(param_file,spatial_file)
     use Block_Network
     use Block_Reservoir
     use Block_Control
+#ifdef USE_NETCDF
+    use Netcdf_Topology
+#endif
     !
     implicit none
     !
@@ -52,6 +55,16 @@ Subroutine BEGIN(param_file,spatial_file)
     !     Establish the Julian day for which simulations begin
     !
     jul_start = Julian(start_year,start_month,start_day)
+    !
+    if (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0) then
+#ifdef USE_NETCDF
+        call READ_TOPOLOGY_NETCDF(spatial_file)
+        return
+#else
+        write(*,*) 'NetCDF topology input requires rbm10_VIC_nc.'
+        stop
+#endif
+    end if
     !
     if (control_file_mode) then
         do

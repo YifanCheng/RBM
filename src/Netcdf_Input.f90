@@ -18,6 +18,13 @@ module Netcdf_Input
     integer :: lw_varid = -1
     integer :: press_varid = -1
     integer :: wind_varid = -1
+    integer :: heat_remap_ncid = -1
+    integer, allocatable :: remap_overlaps(:)
+    integer, allocatable :: remap_i_index(:)
+    integer, allocatable :: remap_j_index(:)
+    integer, allocatable :: remap_start(:)
+    real(8), allocatable :: remap_weight(:)
+    logical :: heat_remap_mode = .false.
     integer(kind=8), allocatable :: flow_ids(:)
     integer(kind=8), allocatable :: heat_ids(:)
     logical :: nc_forcing_open = .false.
@@ -49,7 +56,10 @@ contains
         call NC_INPUT_CHECK(nf90_open(trim(control_heat_file), nf90_nowrite, heat_ncid), 'open heat file')
         call NC_INPUT_CHECK(nf90_inq_varid(flow_ncid, trim(control_flow_var), flow_varid), 'find flow variable')
         call NC_INPUT_CHECK(nf90_inq_varid(flow_ncid, trim(control_flow_id_var), flow_id_varid), 'find flow id variable')
-        call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_id_var), heat_id_varid), 'find heat id variable')
+        heat_remap_mode = (LEN_TRIM(control_heat_remap_file) .gt. 0)
+        if (.not. heat_remap_mode) then
+            call NC_INPUT_CHECK(nf90_inq_varid(heat_ncid, trim(control_heat_id_var), heat_id_varid), 'find heat id variable')
+        end if
 
         status = nf90_inq_varid(heat_ncid, trim(control_heat_tair_var), tair_varid)
         raw_heat_schema = (status .ne. nf90_noerr .or. trim(control_heat_tair_var) .eq. 'TSA')
@@ -71,13 +81,16 @@ contains
 
         call NC_INPUT_CHECK(nf90_inq_dimid(flow_ncid, 'seg', dimid), 'find flow seg dimension')
         call NC_INPUT_CHECK(nf90_inquire_dimension(flow_ncid, dimid, len=nflow), 'read flow seg length')
-        call NC_INPUT_CHECK(nf90_inq_dimid(heat_ncid, 'hru', dimid), 'find heat hru dimension')
-        call NC_INPUT_CHECK(nf90_inquire_dimension(heat_ncid, dimid, len=nheat), 'read heat hru length')
-
         allocate(flow_ids(nflow))
-        allocate(heat_ids(nheat))
         call NC_INPUT_CHECK(nf90_get_var(flow_ncid, flow_id_varid, flow_ids), 'read flow ids')
-        call NC_INPUT_CHECK(nf90_get_var(heat_ncid, heat_id_varid, heat_ids), 'read heat ids')
+        if (heat_remap_mode) then
+            call INIT_HEAT_REMAP(nflow, nheat)
+        else
+            call NC_INPUT_CHECK(nf90_inq_dimid(heat_ncid, 'hru', dimid), 'find heat hru dimension')
+            call NC_INPUT_CHECK(nf90_inquire_dimension(heat_ncid, dimid, len=nheat), 'read heat hru length')
+            allocate(heat_ids(nheat))
+            call NC_INPUT_CHECK(nf90_get_var(heat_ncid, heat_id_varid, heat_ids), 'read heat ids')
+        end if
 
         ! Validate that the flow time dimension is long enough for the requested run.
         ! The flow variable is indexed as (id, time), so the time dimension is the 2nd one.
@@ -106,7 +119,11 @@ contains
         write(*,*) '  Heat file        : ', trim(control_heat_file)
         write(*,*) '  Flow variable    : ', trim(control_flow_var)
         write(*,*) '  Flow id variable : ', trim(control_flow_id_var)
-        write(*,*) '  Heat id variable : ', trim(control_heat_id_var)
+        if (heat_remap_mode) then
+            write(*,*) '  Heat remap file  : ', trim(control_heat_remap_file)
+        else
+            write(*,*) '  Heat id variable : ', trim(control_heat_id_var)
+        end if
         if (raw_heat_schema) then
             write(*,*) '  Heat schema      : raw CLM variables (TSA/RH2M/FSDS/FLDS/PBOT/U10)'
         else
@@ -133,6 +150,82 @@ contains
 
         nc_forcing_open = .true.
     end subroutine NC_INPUT_INIT
+
+
+
+    subroutine INIT_HEAT_REMAP(nflow, nheat)
+        integer, intent(in) :: nflow
+        integer, intent(out) :: nheat
+        integer :: dimid, data_len, varid, p, k, k0, k1
+        integer(kind=8), allocatable :: remap_poly_ids(:)
+        real(8), allocatable :: raw_weight(:)
+        real(8) :: weight_sum
+
+        call NC_INPUT_CHECK(nf90_open(trim(control_heat_remap_file), nf90_nowrite, heat_remap_ncid), &
+            'open heat remap file')
+        call NC_INPUT_CHECK(nf90_inq_dimid(heat_remap_ncid, 'polyid', dimid), 'find remap polyid dimension')
+        call NC_INPUT_CHECK(nf90_inquire_dimension(heat_remap_ncid, dimid, len=nheat), &
+            'read remap polyid length')
+        call NC_INPUT_CHECK(nf90_inq_dimid(heat_remap_ncid, 'data', dimid), 'find remap data dimension')
+        call NC_INPUT_CHECK(nf90_inquire_dimension(heat_remap_ncid, dimid, len=data_len), &
+            'read remap data length')
+
+        if (nheat .lt. nflow) then
+            write(*,*) 'NetCDF input error: heat remap polyid count (', nheat, &
+                ') is smaller than flow ID count (', nflow, ')'
+            stop
+        end if
+
+        allocate(heat_ids(nheat))
+        allocate(remap_poly_ids(nheat))
+        allocate(remap_overlaps(nheat))
+        allocate(remap_start(nheat))
+        allocate(remap_i_index(data_len))
+        allocate(remap_j_index(data_len))
+        allocate(remap_weight(data_len))
+        allocate(raw_weight(data_len))
+
+        call NC_INPUT_CHECK(nf90_inq_varid(heat_remap_ncid, 'polyid', varid), 'find remap polyid')
+        call NC_INPUT_CHECK(nf90_get_var(heat_remap_ncid, varid, remap_poly_ids), 'read remap polyid')
+        heat_ids = remap_poly_ids
+        call NC_INPUT_CHECK(nf90_inq_varid(heat_remap_ncid, 'overlaps', varid), 'find remap overlaps')
+        call NC_INPUT_CHECK(nf90_get_var(heat_remap_ncid, varid, remap_overlaps), 'read remap overlaps')
+        call NC_INPUT_CHECK(nf90_inq_varid(heat_remap_ncid, 'i_index', varid), 'find remap i_index')
+        call NC_INPUT_CHECK(nf90_get_var(heat_remap_ncid, varid, remap_i_index), 'read remap i_index')
+        call NC_INPUT_CHECK(nf90_inq_varid(heat_remap_ncid, 'j_index', varid), 'find remap j_index')
+        call NC_INPUT_CHECK(nf90_get_var(heat_remap_ncid, varid, remap_j_index), 'read remap j_index')
+        call NC_INPUT_CHECK(nf90_inq_varid(heat_remap_ncid, 'weight', varid), 'find remap weight')
+        call NC_INPUT_CHECK(nf90_get_var(heat_remap_ncid, varid, raw_weight), 'read remap weight')
+
+        k0 = 1
+        do p = 1, nheat
+            remap_start(p) = k0
+            k1 = k0 + remap_overlaps(p) - 1
+            if (k1 .gt. data_len) then
+                write(*,*) 'NetCDF input error: heat remap overlaps exceed data dimension at polyid index ', p
+                stop
+            end if
+            weight_sum = 0.0_8
+            do k = k0, k1
+                if (raw_weight(k) .gt. 0.0_8) weight_sum = weight_sum + raw_weight(k)
+            end do
+            if (weight_sum .gt. 0.0_8) then
+                do k = k0, k1
+                    remap_weight(k) = raw_weight(k) / weight_sum
+                end do
+            else
+                remap_weight(k0:k1) = 0.0
+            end if
+            k0 = k1 + 1
+        end do
+        if (k0 .ne. data_len + 1) then
+            write(*,*) 'NetCDF input error: heat remap overlaps do not sum to data dimension.'
+            stop
+        end if
+
+        deallocate(remap_poly_ids)
+        deallocate(raw_weight)
+    end subroutine INIT_HEAT_REMAP
 
     subroutine READ_FORCING_NETCDF()
         integer :: nc, ncell, no_flow, no_heat, nr
@@ -236,6 +329,56 @@ contains
         q_local_out = 0.0
     end subroutine READ_FLOW_CELL
 
+
+
+    subroutine READ_REMAP_HEAT_CELL(day_index, heat_idx, cell_index, context)
+        integer, intent(in) :: day_index, heat_idx, cell_index
+        character(len=*), intent(in) :: context
+        real :: tsa_k, rh_pct, fsds, flds, pbot, u10
+        real, parameter :: radiation_factor = 2.388e-4
+
+        call READ_REMAP_RAW(tair_varid, day_index, heat_idx, tsa_k, context)
+        call READ_REMAP_RAW(vp_varid, day_index, heat_idx, rh_pct, context)
+        call READ_REMAP_RAW(sw_varid, day_index, heat_idx, fsds, context)
+        call READ_REMAP_RAW(lw_varid, day_index, heat_idx, flds, context)
+        call READ_REMAP_RAW(press_varid, day_index, heat_idx, pbot, context)
+        call READ_REMAP_RAW(wind_varid, day_index, heat_idx, u10, context)
+
+        dbt(cell_index) = ROUND1(tsa_k - 273.15)
+        ea(cell_index) = ROUND1((rh_pct/100.0) * SATURATION_VAPOR_PRESSURE_MB(tsa_k))
+        Q_ns(cell_index) = ROUND4(fsds * radiation_factor)
+        Q_na(cell_index) = ROUND4(flds * radiation_factor)
+        rho = 1.225
+        press(cell_index) = ROUND1(pbot/100.0)
+        wind(cell_index) = ROUND1(u10)
+    end subroutine READ_REMAP_HEAT_CELL
+
+    subroutine READ_REMAP_RAW(varid, day_index, poly_index, value, context)
+        integer, intent(in) :: varid, day_index, poly_index
+        character(len=*), intent(in) :: context
+        real, intent(out) :: value
+        integer :: k, k0, k1
+        real :: raw_values(1)
+        real(8) :: total
+
+        if (poly_index .lt. 1 .or. poly_index .gt. size(remap_overlaps)) then
+            write(*,*) 'NetCDF input error: remap index out of range in ', trim(context), ': ', poly_index
+            stop
+        end if
+
+        total = 0.0_8
+        k0 = remap_start(poly_index)
+        k1 = k0 + remap_overlaps(poly_index) - 1
+        do k = k0, k1
+            call NC_INPUT_CHECK(nf90_get_var(heat_ncid, varid, raw_values, &
+                start=(/remap_i_index(k), remap_j_index(k), day_index/), count=(/1, 1, 1/)), context)
+            if (abs(raw_values(1)) .lt. 1.0e30) then
+                total = total + remap_weight(k) * real(raw_values(1), kind=8)
+            end if
+        end do
+        value = real(total)
+    end subroutine READ_REMAP_RAW
+
     subroutine READ_HEAT_CELL(day_index, cell_index)
         integer, intent(in) :: day_index, cell_index
         integer :: heat_idx
@@ -243,7 +386,9 @@ contains
 
         heat_idx = FIND_FLOW_INDEX(hru_id(cell_index))
         write(context,'(A,I0,A,I0,A,I0)') 'read heat value day=',day_index,' cell=',cell_index,' heat_idx=',heat_idx
-        if (raw_heat_schema) then
+        if (heat_remap_mode) then
+            call READ_REMAP_HEAT_CELL(day_index, heat_idx, cell_index, trim(context))
+        else if (raw_heat_schema) then
             call READ_RAW_HEAT_CELL(day_index, heat_idx, cell_index, trim(context))
         else
             call READ_NC_REAL(heat_ncid, tair_varid, day_index, heat_idx, dbt(cell_index), 1, trim(context))

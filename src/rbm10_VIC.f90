@@ -77,7 +77,16 @@ PROGRAM RBM10_VIC
     if (numarg .eq. 1) then
         call getarg ( 1, control_file )
         call READ_CONTROL(control_file)
-        net_file = control_network_file
+        if (LEN_TRIM(control_topology_file) .gt. 0) then
+#ifdef USE_NETCDF
+            net_file = control_topology_file
+#else
+            write(*,*) 'NetCDF topology input requires rbm10_VIC_nc.'
+            stop
+#endif
+        else
+            net_file = control_network_file
+        end if
         outPrefix = control_output_prefix
         inPrefix = ''
     else
@@ -93,17 +102,25 @@ PROGRAM RBM10_VIC
     temp_file     = TRIM(outPrefix)//'.Temp'
     res_file      = TRIM(outPrefix)//'.Resv'
     !
-    write(*,*) 'Network file    : ',net_file
+    if (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0) then
+        write(*,*) 'Topology file   : ',net_file
+    else
+        write(*,*) 'Network file    : ',net_file
+    end if
     write(*,*) 'Parameter file  : ',param_file!
     write(*,*) 'Temperature file: ',temp_file
     write(*,*) 'Spatial file: ',spatial_file
     write(*,*) 'Reservoir file:   ',res_file
     !
-    OPEN(UNIT=90,FILE=TRIM(net_file),STATUS='OLD')
+    if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) then
+        OPEN(UNIT=90,FILE=TRIM(net_file),STATUS='OLD')
+    end if
     !
     !     Read header information from control file
     !
-    read(90,*)
+    if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) then
+        read(90,*)
+    end if
     if (control_file_mode) then
         flow_file = control_flow_file
         heat_file = control_heat_file
@@ -166,6 +183,6 @@ PROGRAM RBM10_VIC
     CLOSE(37)
     CLOSE(38)
     CLOSE(39)
-    CLOSE(90)
+    if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) CLOSE(90)
     STOP
 END PROGRAM RBM10_VIC

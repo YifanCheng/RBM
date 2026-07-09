@@ -6,8 +6,10 @@ Module Block_Control
     implicit none
     logical :: control_file_mode = .FALSE.
     character(len=200) :: control_network_file = ""
+    character(len=200) :: control_topology_file = ""
     character(len=200) :: control_flow_file = ""
     character(len=200) :: control_heat_file = ""
+    character(len=200) :: control_heat_remap_file = ""
     character(len=200) :: control_reservoir_file = ""
     character(len=200) :: control_reservoir_storage_file = ""
     character(len=200) :: control_reservoir_sel_withdraw_file = ""
