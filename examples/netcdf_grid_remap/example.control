@@ -1,0 +1,20 @@
+! Two-day integrated netCDF example. Run from the repository root.
+<topology_file> examples/netcdf_grid_remap/input/topology.nc
+<flow_file> examples/netcdf_grid_remap/input/streamflow.nc
+<heat_file> examples/netcdf_grid_remap/input/meteorology_grid.nc
+<heat_remap_file> examples/netcdf_grid_remap/input/grid_to_hru_weights.nc
+<output_prefix> examples/netcdf_grid_remap/output/example
+
+<start_date> 20000101
+<end_date> 20000102
+<source> False
+<reservoir> False
+<nres> 0
+<select_withdraw> False
+<verbose> False
+
+<input_format> netcdf
+<output_format> both
+<flow_var> KWroutedRunoff
+<flow_id_var> reachID
+<heat_tair_var> TSA

@@ -10,6 +10,77 @@
 This is the public source code repository for the **River Basin Model**, **RBM**. RBM documentation can be read on the
 [RBM documentation website](http://rbm.readthedocs.org).
 
+## Integrated netCDF workflow
+
+RBM can now run directly from a centralized control file using:
+
+- legacy ASCII forcing or netCDF forcing;
+- a legacy ASCII Network file or a netCDF river topology file;
+- HRU-ready meteorology or raw gridded meteorology with internal grid-to-HRU
+  remapping;
+- optional local runoff and baseflow conversion to RBM local flow;
+- ASCII, netCDF, or both temperature output formats;
+- optional reservoir and selective-withdrawal simulation.
+
+The legacy two-argument ASCII command remains supported.
+
+### Build
+
+The ASCII-capable executable requires a Fortran compiler:
+
+~~~sh
+cd src
+make clean
+make rbm10_VIC
+~~~
+
+The integrated netCDF workflow additionally requires the netCDF C and Fortran
+development libraries. Confirm that <code>nc-config</code> and
+<code>nf-config</code> are available, then run:
+
+~~~sh
+cd src
+make clean
+make rbm10_VIC_nc
+cd ..
+~~~
+
+RBM itself does not require Python, xarray, numpy, GDAL, or SQLite. Python 3 is
+used only by the optional output comparison tests.
+
+### Run the included example
+
+The repository includes a two-day installation test with topology, routed
+streamflow, raw gridded meteorology, grid-to-HRU weights, a ready-to-run control
+file, and expected outputs:
+
+~~~sh
+./src/rbm10_VIC_nc examples/netcdf_grid_remap/example.control
+~~~
+
+Run and validate it in one command:
+
+~~~sh
+examples/netcdf_grid_remap/run_and_validate.sh
+~~~
+
+See [the integrated example](examples/netcdf_grid_remap/README.md) for file
+descriptions and [the user run guide](docs/Documentation/run_RBM.md) for all
+control options, input schemas, and legacy compatibility.
+
+### Main commands
+
+~~~sh
+# Modern control-file mode
+./src/rbm10_VIC_nc /path/to/run.control
+
+# ASCII-only control-file mode
+./src/rbm10_VIC /path/to/run.control
+
+# Legacy mode
+./src/rbm10_VIC input_prefix output_prefix
+~~~
+
 RBM was first applied to the development of a water temperature Total Maximum Daily Load (TMDL) for the Columbia
 and Snake rivers [Yearsley et al. [2003]](http://www.hydro.washington.edu/Lettenmaier/Models/RBM/publications/Columbia_River_Heat.pdf)
  as a vector-based model. The grid-based version, integrated with the Variable Infiltration Capacity (VIC) macroscale hydrologic model, was developed at the University

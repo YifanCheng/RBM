@@ -72,17 +72,24 @@ PROGRAM RBM10_VIC
         write (*,*) 'Control-file mode:'
         write (*,*) '  $ <program-name> <control_file>'
         write (*,*) ' '
-        stop
+        stop 1
     end if
     if (numarg .eq. 1) then
         call getarg ( 1, control_file )
         call READ_CONTROL(control_file)
+#ifndef USE_NETCDF
+        if (control_write_netcdf) then
+            write(*,*) "netCDF output requested, but this executable was built without netCDF support."
+            write(*,*) "Build and run rbm10_VIC_nc, or set <output_format> ascii."
+            stop 1
+        end if
+#endif
         if (LEN_TRIM(control_topology_file) .gt. 0) then
 #ifdef USE_NETCDF
             net_file = control_topology_file
 #else
             write(*,*) 'NetCDF topology input requires rbm10_VIC_nc.'
-            stop
+            stop 1
 #endif
         else
             net_file = control_network_file
@@ -147,15 +154,17 @@ PROGRAM RBM10_VIC
     !
     !     Open file with reservoir parameters
     !
-    open(unit=37,FILE=TRIM(reservoir_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+    if (.not. control_file_mode .or. control_reservoir) then
+        open(unit=37,FILE=TRIM(reservoir_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     !
     !     Open file with reservoir storage data
     !
-    open(unit=38,FILE=TRIM(reservoir_storage_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+        open(unit=38,FILE=TRIM(reservoir_storage_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     !
     !     Open file with reservoir selective withdrawal data
     !
-    open(unit=39,FILE=TRIM(reservoir_sel_withdraw_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+        open(unit=39,FILE=TRIM(reservoir_sel_withdraw_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+    end if
     !
     !     Call systems programs to get started
     !
@@ -180,9 +189,11 @@ PROGRAM RBM10_VIC
         CLOSE(35)
         CLOSE(36)
     end if
-    CLOSE(37)
-    CLOSE(38)
-    CLOSE(39)
+    if (.not. control_file_mode .or. control_reservoir) then
+        CLOSE(37)
+        CLOSE(38)
+        CLOSE(39)
+    end if
     if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) CLOSE(90)
     STOP
 END PROGRAM RBM10_VIC

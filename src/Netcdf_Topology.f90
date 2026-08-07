@@ -15,7 +15,7 @@ contains
 
         if (status /= nf90_noerr) then
             write(*,*) 'NetCDF topology error: ', trim(context), ': ', trim(nf90_strerror(status))
-            stop
+            stop 1
         end if
     end subroutine NC_TOPO_CHECK
 
@@ -49,6 +49,25 @@ contains
         call NC_TOPO_CHECK(nf90_get_var(ncid, varid, values), 'read '//trim(name))
     end subroutine READ_NC_REAL_1D
 
+    subroutine READ_NC_REAL_1D_OPTIONAL(ncid, name, values, fallback, found)
+        integer, intent(in) :: ncid
+        character(len=*), intent(in) :: name
+        real, intent(out) :: values(:)
+        real, intent(in) :: fallback(:)
+        logical, intent(out) :: found
+        integer :: status, varid
+
+        status = nf90_inq_varid(ncid, trim(name), varid)
+        if (status .eq. nf90_enotvar) then
+            found = .FALSE.
+            values = fallback
+            return
+        end if
+        call NC_TOPO_CHECK(status, 'find '//trim(name))
+        found = .TRUE.
+        call NC_TOPO_CHECK(nf90_get_var(ncid, varid, values), 'read '//trim(name))
+    end subroutine READ_NC_REAL_1D_OPTIONAL
+
     subroutine ALLOCATE_TOPOLOGY_ARRAYS()
         allocate(ndelta(heat_cells))
         allocate(mu(nreach))
@@ -70,6 +89,10 @@ contains
         allocate(reach_cell(nreach,ns_max))
         allocate(head_cell(nreach))
         allocate(hru_id(heat_cells))
+        allocate(grid_row(heat_cells))
+        allocate(grid_col(heat_cells))
+        allocate(grid_lat(heat_cells))
+        allocate(grid_lon(heat_cells))
         allocate(segment_cell(nreach,ns_max))
         allocate(x_dist(nreach,0:ns_max))
 
@@ -116,7 +139,7 @@ contains
         integer :: head_name, trib_cell, main_stem, ns_max_test
         integer :: nrow, ncol, nndlta_int
         real :: rmile0, rmile1, nndlta
-        logical :: first_cell
+        logical :: first_cell, grid_lat_found, grid_lon_found
         character(len=8) :: lat
         character(len=10) :: long
         real, parameter :: miles_to_ft = 5280.0
@@ -134,6 +157,8 @@ contains
         real, allocatable :: topo_rmile_head(:)
         real, allocatable :: topo_rmile(:)
         real, allocatable :: topo_ndelta(:)
+        real, allocatable :: topo_grid_lat(:)
+        real, allocatable :: topo_grid_lon(:)
         real, allocatable :: topo_alphamu(:)
         real, allocatable :: topo_beta(:)
         real, allocatable :: topo_gmma(:)
@@ -157,6 +182,7 @@ contains
         allocate(topo_node(heat_cells), topo_row(heat_cells), topo_col(heat_cells))
         allocate(topo_hru_id(heat_cells), topo_downstream_id(heat_cells))
         allocate(topo_rmile(heat_cells), topo_ndelta(heat_cells), topo_res_num(heat_cells))
+        allocate(topo_grid_lat(heat_cells), topo_grid_lon(heat_cells))
 
         call READ_NC_INT_1D(ncid, 'no_cells', topo_no_cells)
         call READ_NC_INT_1D(ncid, 'head_name', topo_head_name)
@@ -173,6 +199,12 @@ contains
         call READ_NC_INT_1D(ncid, 'col', topo_col)
         call READ_NC_INT_1D(ncid, 'hru_id', topo_hru_id)
         call READ_NC_INT_1D(ncid, 'downstream_id', topo_downstream_id)
+        call READ_NC_REAL_1D_OPTIONAL(ncid, 'grid_lat', topo_grid_lat, real(topo_hru_id), grid_lat_found)
+        call READ_NC_REAL_1D_OPTIONAL(ncid, 'grid_lon', topo_grid_lon, real(topo_downstream_id), grid_lon_found)
+        if (grid_lat_found .neqv. grid_lon_found) then
+            write(*,*) 'NetCDF topology error: grid_lat and grid_lon must be provided together.'
+            stop 1
+        end if
         call READ_NC_REAL_1D(ncid, 'rmile', topo_rmile)
         call READ_NC_REAL_1D(ncid, 'ndelta', topo_ndelta)
         call READ_NC_INT_1D(ncid, 'res_num', topo_res_num)
@@ -185,7 +217,7 @@ contains
         do nr = 1, nreach
             nseg = 0
             nseg_cum = 0
-            write(*,*) ' Starting to read reach ', nr
+            if (control_verbose) write(*,*) ' Starting to read reach ', nr
 
             no_cells(nr) = topo_no_cells(nr)
             head_name = topo_head_name(nr)
@@ -193,9 +225,18 @@ contains
             main_stem = topo_main_stem(nr)
             rmile0 = topo_rmile_head(nr)
             x_dist(nr,0) = miles_to_ft * rmile0
-            write(*,*) 'reach number', nr, 'boundary_distance', x_dist(nr,0)
+            if (control_verbose) write(*,*) 'reach number', nr, 'boundary_distance', x_dist(nr,0)
 
             if (trib_cell .gt. 0) then
+                if (trib_cell .gt. heat_cells) then
+                    write(*,*) 'NetCDF topology error: tributary cell is out of range: ', trib_cell
+                    stop 1
+                end if
+                if (no_tribs(trib_cell) .ge. size(trib,2)) then
+                    write(*,*) 'NetCDF topology error: more than ', size(trib,2), &
+                        ' tributaries enter cell ', trib_cell
+                    stop 1
+                end if
                 no_tribs(trib_cell) = no_tribs(trib_cell) + 1
                 trib(trib_cell,no_tribs(trib_cell)) = nr
             end if
@@ -213,8 +254,20 @@ contains
                 nrow = topo_row(ncell)
                 ncol = topo_col(ncell)
                 hru_id(ncell) = topo_hru_id(ncell)
-                write(lat,'(i8)') topo_hru_id(ncell)
-                write(long,'(i10)') topo_downstream_id(ncell)
+                grid_row(ncell) = nrow
+                grid_col(ncell) = ncol
+                grid_lat(ncell) = topo_grid_lat(ncell)
+                grid_lon(ncell) = topo_grid_lon(ncell)
+                if (grid_lat_found) then
+                    write(lat,'(f8.4)') grid_lat(ncell)
+                else
+                    write(lat,'(i8)') topo_hru_id(ncell)
+                end if
+                if (grid_lon_found) then
+                    write(long,'(f10.4)') grid_lon(ncell)
+                else
+                    write(long,'(i10)') topo_downstream_id(ncell)
+                end if
                 rmile1 = topo_rmile(ncell)
                 ndelta(ncell) = topo_ndelta(ncell)
                 res_num(ncell) = topo_res_num(ncell)
@@ -237,6 +290,11 @@ contains
                 nndlta = 0
 200             continue
                 nndlta = nndlta + 1
+                if (nseg .ge. ns_max) then
+                    write(*,*) 'RBM is terminating because NS_MAX would be exceeded in reach ', nr
+                    write(*,*) 'Increase NS_MAX in Block_Network to at least: ', nseg+1
+                    stop 1
+                end if
                 nseg = nseg + 1
                 segment_cell(nr,nseg) = ncell
                 x_dist(nr,nseg) = x_dist(nr,nseg-1) - dx(ncell)
@@ -254,7 +312,7 @@ contains
                 no_celm(nr) = nseg
                 segment_cell(nr,nseg) = ncell
                 x_dist(nr,nseg) = miles_to_ft * rmile1
-                write(*,*) 'number of segment in reach', nr, nseg
+                if (control_verbose) write(*,*) 'number of segment in reach', nr, nseg
             end do
 
             if (trib_cell .gt. 0) then
@@ -267,7 +325,7 @@ contains
         if (ns_max_test .gt. ns_max) then
             write(*,*) 'RBM is terminating because'
             write(*,*) 'NS_MAX exceeded. Change NS_MAX in Block_Network to: ', ns_max_test
-            stop
+            stop 1
         end if
 
         nwpd = 1
@@ -276,7 +334,7 @@ contains
         deallocate(topo_no_cells, topo_head_name, topo_trib_cell, topo_main_stem)
         deallocate(topo_rmile_head, topo_alphamu, topo_beta, topo_gmma, topo_mu, topo_smooth_param)
         deallocate(topo_node, topo_row, topo_col, topo_hru_id, topo_downstream_id)
-        deallocate(topo_rmile, topo_ndelta, topo_res_num)
+        deallocate(topo_rmile, topo_ndelta, topo_res_num, topo_grid_lat, topo_grid_lon)
     end subroutine READ_TOPOLOGY_NETCDF
 
 end module Netcdf_Topology

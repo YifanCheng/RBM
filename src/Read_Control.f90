@@ -47,6 +47,10 @@ SUBROUTINE SET_CONTROL_VALUE(name,value)
         control_heat_file = TRIM(value)
     case ("heat_remap_file")
         control_heat_remap_file = TRIM(value)
+    case ("local_flow_file")
+        control_local_flow_file = TRIM(value)
+    case ("area_file")
+        control_area_file = TRIM(value)
     case ("reservoir_file")
         control_reservoir_file = TRIM(value)
     case ("reservoir_storage_file")
@@ -67,6 +71,8 @@ SUBROUTINE SET_CONTROL_VALUE(name,value)
         read(value,*) control_nres
     case ("select_withdraw")
         control_select_withdraw = CONTROL_LOGICAL(value)
+    case ("verbose")
+        control_verbose = CONTROL_LOGICAL(value)
     case ("input_format")
         control_input_format = TRIM(value)
     case ("output_format")
@@ -89,6 +95,14 @@ SUBROUTINE SET_CONTROL_VALUE(name,value)
         control_heat_press_var = TRIM(value)
     case ("heat_wind_var")
         control_heat_wind_var = TRIM(value)
+    case ("heat_density_var")
+        control_heat_density_var = TRIM(value)
+    case ("local_runoff_var")
+        control_local_runoff_var = TRIM(value)
+    case ("local_baseflow_var")
+        control_local_baseflow_var = TRIM(value)
+    case ("area_var")
+        control_area_var = TRIM(value)
     case default
         write(*,*) "Ignoring unknown control variable: ",TRIM(name)
     end select
@@ -121,7 +135,7 @@ SUBROUTINE CHECK_CONTROL(control_file)
         TRIM(control_input_format) .ne. "netcdf") then
         write(*,*) "Invalid <input_format> in ",TRIM(control_file),": '", &
             TRIM(control_input_format),"' (must be 'ascii' or 'netcdf')"
-        stop
+        stop 1
     end if
     if (LEN_TRIM(control_output_format) .eq. 0) then
         control_output_format = control_input_format
@@ -131,7 +145,7 @@ SUBROUTINE CHECK_CONTROL(control_file)
         TRIM(control_output_format) .ne. "both") then
         write(*,*) "Invalid <output_format> in ",TRIM(control_file),": '", &
             TRIM(control_output_format),"' (must be 'ascii', 'netcdf', or 'both')"
-        stop
+        stop 1
     end if
     control_write_ascii = (TRIM(control_output_format) .eq. "ascii" .or. &
         TRIM(control_output_format) .eq. "both")
@@ -141,6 +155,11 @@ SUBROUTINE CHECK_CONTROL(control_file)
     ! Required keys common to every input format.
     if (LEN_TRIM(control_network_file) .eq. 0 .and. LEN_TRIM(control_topology_file) .eq. 0) then
         call MISSING_CONTROL(control_file,"network_file or topology_file")
+    end if
+    if (LEN_TRIM(control_network_file) .gt. 0 .and. LEN_TRIM(control_topology_file) .gt. 0) then
+        write(*,*) "Invalid control in ",TRIM(control_file), &
+            ": provide either network_file or topology_file, not both."
+        stop 1
     end if
     if (LEN_TRIM(control_output_prefix) .eq. 0) call MISSING_CONTROL(control_file,"output_prefix")
     if (LEN_TRIM(control_start_date) .eq. 0) call MISSING_CONTROL(control_file,"start_date")
@@ -152,19 +171,46 @@ SUBROUTINE CHECK_CONTROL(control_file)
             call MISSING_CONTROL(control_file,"flow_file (netCDF flow forcing path)")
         if (LEN_TRIM(control_heat_file) .eq. 0) &
             call MISSING_CONTROL(control_file,"heat_file (netCDF heat forcing path)")
+        if (LEN_TRIM(control_local_flow_file) .gt. 0 .and. LEN_TRIM(control_area_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"area_file (required with local_flow_file)")
+        if (LEN_TRIM(control_area_file) .gt. 0 .and. LEN_TRIM(control_local_flow_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"local_flow_file (required with area_file)")
     else
         if (LEN_TRIM(control_flow_file) .eq. 0) &
             call MISSING_CONTROL(control_file,"flow_file (ASCII flow forcing path)")
         if (LEN_TRIM(control_heat_file) .eq. 0) &
             call MISSING_CONTROL(control_file,"heat_file (ASCII heat forcing path)")
+        if (LEN_TRIM(control_local_flow_file) .gt. 0 .or. LEN_TRIM(control_area_file) .gt. 0) then
+            write(*,*) "Invalid control in ",TRIM(control_file), &
+                ": local_flow_file and area_file apply only to netCDF input."
+            stop 1
+        end if
     end if
     !
-    ! Reservoir inputs (existing requirement, unchanged).
-    if (LEN_TRIM(control_reservoir_file) .eq. 0) call MISSING_CONTROL(control_file,"reservoir_file")
-    if (LEN_TRIM(control_reservoir_storage_file) .eq. 0) &
-        call MISSING_CONTROL(control_file,"reservoir_storage_file")
-    if (LEN_TRIM(control_reservoir_sel_withdraw_file) .eq. 0) &
-        call MISSING_CONTROL(control_file,"reservoir_sel_withdraw_file")
+    ! Reservoir files are required only when reservoir simulation is enabled.
+    if (control_reservoir) then
+        if (control_nres .le. 0) then
+            write(*,*) "Invalid control in ",TRIM(control_file), &
+                ": nres must be greater than zero when reservoir is True."
+            stop 1
+        end if
+        if (LEN_TRIM(control_reservoir_file) .eq. 0) call MISSING_CONTROL(control_file,"reservoir_file")
+        if (LEN_TRIM(control_reservoir_storage_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"reservoir_storage_file")
+        if (LEN_TRIM(control_reservoir_sel_withdraw_file) .eq. 0) &
+            call MISSING_CONTROL(control_file,"reservoir_sel_withdraw_file")
+    else
+        if (control_nres .ne. 0) then
+            write(*,*) "Invalid control in ",TRIM(control_file), &
+                ": nres must be zero when reservoir is False."
+            stop 1
+        end if
+        if (control_select_withdraw) then
+            write(*,*) "Invalid control in ",TRIM(control_file), &
+                ": select_withdraw requires reservoir=True."
+            stop 1
+        end if
+    end if
     !
     ! Dates must be 8-digit YYYYMMDD (read downstream as (i4,2i2)).
     if (.not. VALID_DATE(control_start_date)) &
@@ -177,7 +223,7 @@ SUBROUTINE CHECK_CONTROL(control_file)
     if (control_end_date .lt. control_start_date) then
         write(*,*) "Invalid date range in ",TRIM(control_file),": end_date ", &
             TRIM(control_end_date)," is earlier than start_date ",TRIM(control_start_date)
-        stop
+        stop 1
     end if
 END SUBROUTINE CHECK_CONTROL
 
@@ -185,7 +231,9 @@ LOGICAL FUNCTION VALID_DATE(value)
     implicit none
     !
     character(len=*), intent(in) :: value
-    integer :: i,ic
+    integer :: i,ic,year,month,day,ios
+    integer :: days_in_month(12)
+    logical :: leap_year
     !
     VALID_DATE = .FALSE.
     if (LEN_TRIM(value) .ne. 8) return
@@ -193,6 +241,14 @@ LOGICAL FUNCTION VALID_DATE(value)
         ic = ICHAR(value(i:i))
         if (ic .lt. ICHAR("0") .or. ic .gt. ICHAR("9")) return
     end do
+    read(value,"(i4,2i2)",iostat=ios) year,month,day
+    if (ios .ne. 0 .or. year .lt. 1) return
+    if (month .lt. 1 .or. month .gt. 12) return
+    days_in_month = (/31,28,31,30,31,30,31,31,30,31,30,31/)
+    leap_year = (mod(year,400) .eq. 0 .or. &
+        (mod(year,4) .eq. 0 .and. mod(year,100) .ne. 0))
+    if (leap_year) days_in_month(2) = 29
+    if (day .lt. 1 .or. day .gt. days_in_month(month)) return
     VALID_DATE = .TRUE.
 END FUNCTION VALID_DATE
 
@@ -202,7 +258,7 @@ SUBROUTINE MISSING_CONTROL(control_file,name)
     character(len=*), intent(in) :: control_file,name
     !
     write(*,*) "Missing required control variable in ",TRIM(control_file),": ",TRIM(name)
-    stop
+    stop 1
 END SUBROUTINE MISSING_CONTROL
 
 SUBROUTINE BAD_DATE(control_file,name,value)
@@ -211,6 +267,6 @@ SUBROUTINE BAD_DATE(control_file,name,value)
     character(len=*), intent(in) :: control_file,name,value
     !
     write(*,*) "Invalid ",TRIM(name)," in ",TRIM(control_file),": '",TRIM(value), &
-        "' (expected 8-digit YYYYMMDD)"
-    stop
+        "' (expected a valid calendar date in YYYYMMDD format)"
+    stop 1
 END SUBROUTINE BAD_DATE

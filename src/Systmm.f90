@@ -8,6 +8,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     use data_type
 #ifdef USE_NETCDF
     use Netcdf_Output
+    use Netcdf_Input, only: NC_INPUT_CLOSE
 #endif
     !
     Implicit None
@@ -51,7 +52,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !
     real,dimension(:),allocatable     :: T_head,T_smth,T_trib
 
-    logical:: DONE
+    logical:: DONE, end_of_reservoir
     logical:: ns_res_pres
     !
     !
@@ -124,13 +125,58 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     allocate (dV_dt_hyp(nres))
     allocate (depth_e(nres))
     allocate (depth_h(nres))
+    depth_e = res_depth_meter(:) * depth_e_frac
+    depth_h = res_depth_meter(:) * depth_h_frac
     allocate (volume_h_min(nres))
     allocate (volume_e_min(nres))
     allocate (res_stratif_start(nres))
     allocate (res_turnover(nres))
     !
     !
-    ! Initialize some arrays
+    ! Initialize model state explicitly so results do not depend on allocator history.
+    !
+    depth = 0.0
+    Q_in = 0.0
+    Q_out = 0.0
+    Q_local = 0.0
+    Q_diff = 0.0
+    delta_sto_flux = 0.0
+    Q_trib = 0.0
+    width = 0.0
+    u = 0.0
+    dt = 0.0
+    dbt = 0.0
+    ea = 0.0
+    Q_ns = 0.0
+    Q_na = 0.0
+    press = 0.0
+    wind = 0.0
+    T_trib = 4.0
+    res_trib_calc = .FALSE.
+    res_start = .FALSE.
+    T_res_in = 4.0
+    Q_res_in = 0.0
+    water_withdrawal = 0.0
+    temp_change_ep = 0.0
+    temp_change_hyp = 0.0
+    temp_out = 4.0
+    T_res = 4.0
+    diffusion_tot = 0.0
+    advec_hyp_tot = 0.0
+    advec_epi_tot = 0.0
+    qsurf_tot = 0.0
+    volume_e_x = 0.0
+    volume_h_x = 0.0
+    surface_area = 0.0
+    K_z = 0.0
+    ns_res_start = 0
+    ns_res_end = 0
+    Q_res_outflow = 0.0
+    Q_res_inflow = 0.0
+    dV_dt_epi = 0.0
+    dV_dt_hyp = 0.0
+    volume_h_min = 0.0
+    volume_e_min = 0.0
     !
     dt_part=0.
     x_part=0.
@@ -161,7 +207,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     if (control_write_netcdf) then
         write(*,*) "netCDF output requested, but this executable was built without netCDF support."
         write(*,*) "Build and run rbm10_VIC_nc, or set <output_format> ascii."
-        stop
+        stop 1
     end if
 #endif
     !
@@ -411,14 +457,16 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                 Q_inflow = Q_outflow
                                 !
                                 nseg=nseg+1
-                                nncell=segment_cell(nr,nseg)
-                                !
-                                !     Reset tributary flag if this is a new cell
-                                !
-                                if(ncell0.ne.nncell) then
-                                    ncell0=nncell
-                                    Q_inflow = Q_in(nncell)
-                                    DONE=.FALSE.
+                                if (nseg .le. no_celm(nr)) then
+                                    nncell=segment_cell(nr,nseg)
+                                    !
+                                    !     Reset tributary flag if this is a new cell
+                                    !
+                                    if(ncell0.ne.nncell) then
+                                        ncell0=nncell
+                                        Q_inflow = Q_in(nncell)
+                                        DONE=.FALSE.
+                                    end if
                                 end if
                                 dt_total=dt_total+dt_calc
                             end do
@@ -516,9 +564,16 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                 !
                                 !     If it is the last segment in the reservoir
                                 !
-                                if(ncell .eq. res_end_node(res_no) .and. &
-                                    (.NOT. res_pres(segment_cell(nr,ns+1)) &
-                                    .or. res_num(segment_cell(nr,ns+1)) .ne. res_no)) then
+                                end_of_reservoir = .FALSE.
+                                if (ncell .eq. res_end_node(res_no)) then
+                                    if (ns .ge. no_celm(nr)) then
+                                        end_of_reservoir = .TRUE.
+                                    else
+                                        end_of_reservoir = .NOT. res_pres(segment_cell(nr,ns+1)) .or. &
+                                            res_num(segment_cell(nr,ns+1)) .ne. res_no
+                                    end if
+                                end if
+                                if (end_of_reservoir) then
                                     exceed_error_bound=.FALSE.
                                     adjust_timestep=.FALSE.
                                     recalculate_volume=.FALSE.
@@ -666,6 +721,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !     ******************************************************
     !
 #ifdef USE_NETCDF
+    if (TRIM(control_input_format) .eq. "netcdf") then
+        call NC_INPUT_CLOSE()
+    end if
     if (control_write_netcdf) then
         call NC_OUTPUT_CLOSE()
     end if

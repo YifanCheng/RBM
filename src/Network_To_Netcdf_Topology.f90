@@ -4,19 +4,22 @@ program Network_To_Netcdf_Topology
 
     character(len=256) :: network_file, topology_file
     character(len=512) :: line
+    character(len=8) :: lat_text
+    character(len=10) :: lon_text
     integer :: argc, ios
     integer :: nreach, flow_cells, heat_cells, nres
     integer :: nr, nc, ncell
-    logical :: source, reservoir, select_withdraw
+    logical :: source, reservoir, select_withdraw, has_grid_coords
     integer, allocatable :: no_cells(:), head_name(:), trib_cell(:), main_stem(:)
     integer, allocatable :: node(:), row(:), col(:), hru_id(:), downstream_id(:), res_num(:)
     real, allocatable :: rmile_head(:), alphamu(:), beta(:), gmma(:), mu(:), smooth_param(:)
     real, allocatable :: rmile(:), ndelta(:)
+    real, allocatable :: grid_lat(:), grid_lon(:)
 
     argc = command_argument_count()
     if (argc .ne. 2) then
         write(*,*) 'Usage: network_to_netcdf_topology <legacy_Network_file> <topology.nc>'
-        stop
+        stop 1
     end if
 
     call get_command_argument(1, network_file)
@@ -40,6 +43,7 @@ program Network_To_Netcdf_Topology
     allocate(rmile_head(nreach), alphamu(nreach), beta(nreach), gmma(nreach), mu(nreach), smooth_param(nreach))
     allocate(node(heat_cells), row(heat_cells), col(heat_cells), hru_id(heat_cells), downstream_id(heat_cells))
     allocate(rmile(heat_cells), ndelta(heat_cells), res_num(heat_cells))
+    allocate(grid_lat(heat_cells), grid_lon(heat_cells))
     res_num = 0
 
     ncell = 0
@@ -50,26 +54,41 @@ program Network_To_Netcdf_Topology
         do nc = 1, no_cells(nr)
             ncell = ncell + 1
             if (reservoir) then
-                read(10,'(5x,i5,5x,i5,8x,i5,6x,i8,6x,i10,7x,f10.0,f5.0,i6)') &
-                    node(ncell), row(ncell), col(ncell), hru_id(ncell), downstream_id(ncell), &
+                read(10,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0,i6)') &
+                    node(ncell), row(ncell), col(ncell), lat_text, lon_text, &
                     rmile(ncell), ndelta(ncell), res_num(ncell)
             else
-                read(10,'(5x,i5,5x,i5,8x,i5,6x,i8,6x,i10,7x,f10.0,f5.0)') &
-                    node(ncell), row(ncell), col(ncell), hru_id(ncell), downstream_id(ncell), &
+                read(10,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0)') &
+                    node(ncell), row(ncell), col(ncell), lat_text, lon_text, &
                     rmile(ncell), ndelta(ncell)
             end if
+            read(lat_text,*,iostat=ios) grid_lat(ncell)
+            if (ios .ne. 0) then
+                write(*,*) 'Network topology conversion error: invalid Lat at cell ', ncell
+                stop 1
+            end if
+            read(lon_text,*,iostat=ios) grid_lon(ncell)
+            if (ios .ne. 0) then
+                write(*,*) 'Network topology conversion error: invalid Long at cell ', ncell
+                stop 1
+            end if
+            read(lat_text,*,iostat=ios) hru_id(ncell)
+            if (ios .ne. 0) hru_id(ncell) = node(ncell)
+            read(lon_text,*,iostat=ios) downstream_id(ncell)
+            if (ios .ne. 0) downstream_id(ncell) = node(ncell)
         end do
     end do
     close(10)
+    has_grid_coords = all(abs(grid_lat) .le. 90.0) .and. all(abs(grid_lon) .le. 180.0)
 
     if (ncell .ne. heat_cells) then
         write(*,*) 'Network topology conversion error: read ', ncell, ' cells, expected ', heat_cells
-        stop
+        stop 1
     end if
 
-    call WRITE_TOPOLOGY_NETCDF(trim(topology_file), nreach, flow_cells, heat_cells, &
+    call WRITE_TOPOLOGY_NETCDF(trim(topology_file), nreach, flow_cells, heat_cells, has_grid_coords, &
         no_cells, head_name, trib_cell, main_stem, rmile_head, alphamu, beta, gmma, mu, smooth_param, &
-        node, row, col, hru_id, downstream_id, rmile, ndelta, res_num)
+        node, row, col, hru_id, downstream_id, grid_lat, grid_lon, rmile, ndelta, res_num)
     write(*,*) 'Wrote netCDF topology file: ', trim(topology_file)
 
 contains
@@ -80,7 +99,7 @@ contains
 
         if (status /= nf90_noerr) then
             write(*,*) 'NetCDF topology conversion error: ', trim(context), ': ', trim(nf90_strerror(status))
-            stop
+            stop 1
         end if
     end subroutine CHECK
 
@@ -95,7 +114,7 @@ contains
             read(unit_no,'(A)',iostat=ios) counts_line
             if (ios .ne. 0) then
                 write(*,*) 'Network topology conversion error: could not find counts line.'
-                stop
+                stop 1
             end if
             counts_line = adjustl(counts_line)
             if (len_trim(counts_line) .eq. 0) cycle
@@ -124,22 +143,23 @@ contains
         call CHECK(nf90_def_var(ncid, trim(name), nf90_real, (/dimid/), varid), 'define '//trim(name))
     end subroutine DEF_REAL_VAR
 
-    subroutine WRITE_TOPOLOGY_NETCDF(path, nreach, flow_cells, heat_cells, &
+    subroutine WRITE_TOPOLOGY_NETCDF(path, nreach, flow_cells, heat_cells, has_grid_coords, &
         no_cells, head_name, trib_cell, main_stem, rmile_head, alphamu, beta, gmma, mu, smooth_param, &
-        node, row, col, hru_id, downstream_id, rmile, ndelta, res_num)
+        node, row, col, hru_id, downstream_id, grid_lat, grid_lon, rmile, ndelta, res_num)
         character(len=*), intent(in) :: path
         integer, intent(in) :: nreach, flow_cells, heat_cells
+        logical, intent(in) :: has_grid_coords
         integer, intent(in) :: no_cells(:), head_name(:), trib_cell(:), main_stem(:)
         integer, intent(in) :: node(:), row(:), col(:), hru_id(:), downstream_id(:), res_num(:)
         real, intent(in) :: rmile_head(:), alphamu(:), beta(:), gmma(:), mu(:), smooth_param(:)
-        real, intent(in) :: rmile(:), ndelta(:)
+        real, intent(in) :: grid_lat(:), grid_lon(:), rmile(:), ndelta(:)
 
         integer :: ncid, reach_dimid, cell_dimid
         integer :: nreach_varid, flow_cells_varid, heat_cells_varid
         integer :: no_cells_varid, head_name_varid, trib_cell_varid, main_stem_varid, rmile_head_varid
         integer :: alphamu_varid, beta_varid, gmma_varid, mu_varid, smooth_param_varid
         integer :: node_varid, row_varid, col_varid, hru_id_varid, downstream_id_varid
-        integer :: rmile_varid, ndelta_varid, res_num_varid
+        integer :: grid_lat_varid, grid_lon_varid, rmile_varid, ndelta_varid, res_num_varid
 
         call CHECK(nf90_create(trim(path), nf90_clobber, ncid), 'create topology file')
         call CHECK(nf90_def_dim(ncid, 'reach', nreach, reach_dimid), 'define reach dimension')
@@ -162,6 +182,10 @@ contains
         call DEF_INT_VAR(ncid, cell_dimid, 'col', col_varid)
         call DEF_INT_VAR(ncid, cell_dimid, 'hru_id', hru_id_varid)
         call DEF_INT_VAR(ncid, cell_dimid, 'downstream_id', downstream_id_varid)
+        if (has_grid_coords) then
+            call DEF_REAL_VAR(ncid, cell_dimid, 'grid_lat', grid_lat_varid)
+            call DEF_REAL_VAR(ncid, cell_dimid, 'grid_lon', grid_lon_varid)
+        end if
         call DEF_REAL_VAR(ncid, cell_dimid, 'rmile', rmile_varid)
         call DEF_REAL_VAR(ncid, cell_dimid, 'ndelta', ndelta_varid)
         call DEF_INT_VAR(ncid, cell_dimid, 'res_num', res_num_varid)
@@ -187,6 +211,10 @@ contains
         call CHECK(nf90_put_var(ncid, col_varid, col), 'write col')
         call CHECK(nf90_put_var(ncid, hru_id_varid, hru_id), 'write hru_id')
         call CHECK(nf90_put_var(ncid, downstream_id_varid, downstream_id), 'write downstream_id')
+        if (has_grid_coords) then
+            call CHECK(nf90_put_var(ncid, grid_lat_varid, grid_lat), 'write grid_lat')
+            call CHECK(nf90_put_var(ncid, grid_lon_varid, grid_lon), 'write grid_lon')
+        end if
         call CHECK(nf90_put_var(ncid, rmile_varid, rmile), 'write rmile')
         call CHECK(nf90_put_var(ncid, ndelta_varid, ndelta), 'write ndelta')
         call CHECK(nf90_put_var(ncid, res_num_varid, res_num), 'write res_num')

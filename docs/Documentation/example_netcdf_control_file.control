@@ -18,17 +18,27 @@
 ! Optional grid-to-HRU remapping weights for raw grid meteorology files.
 ! Omit this when <heat_file> is already HRU/reach-remapped.
 ! <heat_remap_file> /path/to/spatialweights_dises_09081000_77011225.nc
-<reservoir_file> /path/to/routing_dummy.txt
-<reservoir_storage_file> /path/to/routing_dummy
-<reservoir_sel_withdraw_file> /path/to/reservoir_dummy
+! Optional preprocessing-equivalent local flow. Supply both files or neither.
+! The local file must provide daily OUT_RUNOFF and OUT_BASEFLOW in mm; the
+! area file must provide static grid-cell area in m2.
+! <local_flow_file> /path/to/vic_runoff_and_baseflow.nc
+! <area_file> /path/to/vic_grid_area.nc
+! Required only when <reservoir> is True:
+! <reservoir_file> /path/to/reservoir_parameters.txt
+! <reservoir_storage_file> /path/to/reservoir_storage.txt
+! <reservoir_sel_withdraw_file> /path/to/reservoir_withdrawal.txt
 <output_prefix> /path/to/output/dises_77011225_rbm
 
+! NetCDF forcing time coordinates must be daily and use:
+!   time:units = "days since YYYY-MM-DD ..."
+! RBM locates start_date separately in the flow and heat files.
 <start_date> 20000101
 <end_date> 20001230
 <source> False
 <reservoir> False
 <nres> 0
 <select_withdraw> False
+<verbose> False
 
 ! Input options: ascii | netcdf
 <input_format> netcdf
@@ -40,6 +50,11 @@
 ! Flow netCDF variables.
 <flow_var> KWroutedRunoff
 <flow_id_var> reachID
+
+! Optional local-flow variable overrides.
+! <local_runoff_var> OUT_RUNOFF
+! <local_baseflow_var> OUT_BASEFLOW
+! <area_var> area
 
 ! Meteorology/heat netCDF ID variable.
 <heat_id_var> hruId

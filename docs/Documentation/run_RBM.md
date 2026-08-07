@@ -1,4 +1,175 @@
 # Steps to run RBM (Salmon River example)
+
+## Integrated Control-File Workflow
+
+The modernized workflow accepts ASCII or netCDF forcing through one control
+file. The legacy two-argument command remains available and is described later
+in this document.
+
+### Build
+
+The regular build supports legacy and control-file ASCII runs:
+
+```sh
+cd src
+make clean
+make rbm10_VIC
+```
+
+The netCDF build requires the netCDF C and Fortran development libraries,
+including the `nc-config` and `nf-config` commands:
+
+```sh
+cd src
+make clean
+make rbm10_VIC_nc
+```
+
+On CCR, the tested environment is:
+
+```sh
+module load gcc/11.2.0 openmpi/4.1.1 netcdf-fortran/4.5.3 netcdf/4.8.1
+export LD_LIBRARY_PATH="$(nf-config --prefix)/lib:$(nc-config --prefix)/lib64:$LD_LIBRARY_PATH"
+```
+
+For non-CCR systems, install the netCDF-C and netCDF-Fortran development
+packages using the system package manager, then confirm that both configuration
+commands are available:
+
+```sh
+nc-config --version
+nf-config --version
+```
+
+Common package names are:
+
+| System | Installation command |
+| --- | --- |
+| Ubuntu/Debian | <code>sudo apt install gfortran make libnetcdf-dev libnetcdff-dev</code> |
+| Fedora/RHEL | <code>sudo dnf install gcc-gfortran make netcdf-devel netcdf-fortran-devel</code> |
+| macOS with Homebrew | <code>brew install gcc netcdf netcdf-fortran</code> |
+
+Package names and compiler paths can vary by distribution. A successful
+installation must provide <code>gfortran</code>, <code>nc-config</code>, and
+<code>nf-config</code>.
+
+The model itself does not require Python, xarray, numpy, or the old Python
+pre/postprocessing environment. Python 3 is used only by the optional output
+comparison tests. Always run `make clean` when changing compilers or module
+stacks so objects built by different compiler versions are not mixed.
+
+Run the dependency-free comparison-tool tests from `src` with:
+
+```sh
+make test
+```
+
+The fastest end-to-end installation check is the included example:
+
+```sh
+examples/netcdf_grid_remap/run_and_validate.sh
+```
+
+### Run
+
+Start from
+[`example_netcdf_control_file.control`](example_netcdf_control_file.control)
+and replace its paths with local paths. Run netCDF input or output with:
+
+```sh
+./src/rbm10_VIC_nc /path/to/run.control
+```
+
+An ASCII-only control-file run can use:
+
+```sh
+./src/rbm10_VIC /path/to/run.control
+```
+
+The control file selects `ascii` or `netcdf` input and `ascii`, `netcdf`,
+or `both` output. A netCDF topology file can replace the legacy ASCII Network
+file. See [RBM netCDF topology files](netcdf_topology.md) and
+[grid-to-HRU remapping](grid_to_hru_remap.md) for the required schemas.
+
+`<verbose>` is optional and defaults to `True`, preserving legacy console output.
+Set it to `False` to suppress per-reach and per-segment topology messages for
+large networks; errors and the run summary are still shown.
+
+### Output Selection
+
+| `input_format` | `output_format` | Files written |
+| --- | --- | --- |
+| `ascii` | omitted or `ascii` | `.Temp`, `.Spat` |
+| `ascii` | `netcdf` | `.Temp.nc` |
+| `ascii` | `both` | `.Temp`, `.Spat`, `.Temp.nc` |
+| `netcdf` | omitted or `netcdf` | `.Temp.nc` |
+| `netcdf` | `ascii` | `.Temp`, `.Spat` |
+| `netcdf` | `both` | `.Temp`, `.Spat`, `.Temp.nc` |
+
+When `<output_format>` is omitted, it defaults to `<input_format>`.
+The regular binary rejects netCDF input, topology, or output with a message
+directing the user to build `rbm10_VIC_nc`.
+
+### Control File Reference
+
+Paths are interpreted relative to the directory from which RBM is run.
+
+| Control field | Requirement |
+| --- | --- |
+| `network_file` | Legacy ASCII Network file; use this or `topology_file`, not both |
+| `topology_file` | Header-free netCDF river topology; use this or `network_file`, not both |
+| `flow_file` | Required ASCII or netCDF streamflow input |
+| `heat_file` | Required ASCII or netCDF meteorology/energy input |
+| `heat_remap_file` | Optional grid-to-HRU weights for gridded meteorology |
+| `local_flow_file` | Optional gridded runoff/baseflow; requires `area_file` |
+| `area_file` | Optional grid-cell area; requires `local_flow_file` |
+| `output_prefix` | Required output path and filename prefix |
+| `start_date`, `end_date` | Required valid calendar dates in `YYYYMMDD` form |
+| `source` | Legacy source-water option |
+| `reservoir` | Enables reservoir calculations |
+| `nres` | Reservoir count; zero when reservoirs are disabled |
+| `select_withdraw` | Selective-withdrawal option; requires reservoirs |
+| `verbose` | Optional; defaults to `True` |
+| `input_format` | `ascii` or `netcdf` |
+| `output_format` | `ascii`, `netcdf`, or `both`; defaults to input format |
+
+For reservoir runs, also provide `<reservoir_file>`,
+`<reservoir_storage_file>`, and `<reservoir_sel_withdraw_file>`. These
+files are not required when `<reservoir> False`.
+
+The defaults match the validated mizuRoute/CLM variable names. Controls such as
+`<flow_var>`, `<flow_id_var>`, `<heat_tair_var>`, and the local-flow
+variable fields can override names when a compatible dataset uses different
+names. See the schema-specific documentation before overriding them.
+
+NetCDF forcing files must contain a one-dimensional daily `time` coordinate
+with units of `days since YYYY-MM-DD`. RBM locates `start_date`
+independently in the flow and meteorology files, then consumes one record per
+simulation day. This preserves the established sequential behavior for
+`noleap` files while allowing subset runs and files with different time
+origins.
+
+For legacy cases with nonzero local runoff, add both `<local_flow_file>` and
+`<area_file>`. RBM reads gridded runoff plus baseflow in mm and grid-cell area
+in m2, then computes `Q_local` in cfs with the preprocessing formula. These
+inputs are optional so established netCDF controls that intentionally used
+zero local flow remain unchanged. See [grid-to-HRU remapping](grid_to_hru_remap.md)
+for the variable names and formula.
+
+### Validate Two ASCII Temperature Outputs
+
+The comparison helper uses only the Python standard library:
+
+```sh
+python3 tools/compare_rbm_outputs.py reference.Temp candidate.Temp
+```
+
+It verifies record count and ordering, then reports maximum and mean differences
+for stream, headwater, and air temperature plus Qin and Qout. Tolerances can be
+changed with `--temperature-tolerance` and `--flow-tolerance`.
+
+## Legacy VIC and Perl Workflow
+
 The following describes the steps for simulating water temperature with the grid-based semi-Lagrangian model, RBM, assuming one has downloaded [**VIC** 4.2.d](https://github.com/UW-Hydro/VIC/releases/tag/VIC.4.2.d) and prepared all the necessary input files. <br />
 
 ## 1. Download Source Code & Example Datasets

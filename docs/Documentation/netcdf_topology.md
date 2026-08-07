@@ -9,6 +9,11 @@ In `<topology_file>` mode, run configuration that used to live in the Network
 header is supplied by the central RBM control file instead. The topology file
 contains only river topology/reach/cell data.
 
+RBM intentionally does not read GeoPackage (`.gpkg`) layers at runtime because
+that would add a GDAL/SQLite dependency. River graph source data must be exported
+once to the documented netCDF topology schema; RBM then needs only the existing
+netCDF C and Fortran libraries.
+
 ## Build
 
 The netCDF topology reader and converter require the netCDF-capable build:
@@ -33,9 +38,6 @@ Use `<topology_file>` instead of `<network_file>`:
 <topology_file> /path/to/basin_topology.nc
 <flow_file> /path/to/flow.nc
 <heat_file> /path/to/met.nc
-<reservoir_file> /path/to/reservoir_parameters.txt
-<reservoir_storage_file> /path/to/reservoir_storage.txt
-<reservoir_sel_withdraw_file> /path/to/reservoir_withdrawal.txt
 <output_prefix> /path/to/output/run_name
 <start_date> 20000101
 <end_date> 20001230
@@ -46,6 +48,10 @@ Use `<topology_file>` instead of `<network_file>`:
 <input_format> netcdf
 <output_format> both
 ```
+
+When `<reservoir> False`, no reservoir input files are required. When it is
+`True`, also provide `<reservoir_file>`, `<reservoir_storage_file>`, and
+`<reservoir_sel_withdraw_file>`, and set `<nres>` to the number of reservoirs.
 
 Run:
 
@@ -97,6 +103,17 @@ Required `cell` variables:
 | `rmile(cell)` | float | River mile at this cell |
 | `ndelta(cell)` | float | Number of computational elements |
 | `res_num(cell)` | int | Reservoir number, or zero if none |
+
+Optional `cell` variables for direct gridded forcing:
+
+| Variable | Type | Meaning |
+| --- | --- | --- |
+| `grid_lat(cell)` | float | Latitude used to locate this river cell in gridded forcing |
+| `grid_lon(cell)` | float | Longitude used to locate this river cell in gridded forcing |
+
+`grid_lat` and `grid_lon` must be supplied together. Older topology files remain
+readable for ID-based forcing. The transition utility writes both variables and
+preserves decimal coordinates from grid-based legacy Network files.
 
 ## Transition Utility
 
