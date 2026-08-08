@@ -1,7 +1,7 @@
-# Integrated netCDF Example
+# netCDF Grid-Remapping Example
 
-This two-day example exercises the modern RBM workflow without the legacy
-ASCII Network file or external Python preprocessing:
+This two-day example demonstrates direct netCDF input without an ASCII Network
+file or external preprocessing:
 
 - river topology is read from netCDF;
 - routed streamflow is read from netCDF;
@@ -65,7 +65,7 @@ comparator. Python, xarray, and numpy are not required to run RBM itself.
 | File | Purpose |
 | --- | --- |
 | `example.control` | Ready-to-run centralized configuration |
-| `input/topology.nc` | River topology without the old Network header |
+| `input/topology.nc` | River topology without an ASCII Network header |
 | `input/streamflow.nc` | Two days of routed streamflow |
 | `input/meteorology_grid.nc` | Two days of raw gridded meteorology |
 | `input/grid_to_hru_weights.nc` | Grid-to-HRU remapping weights |
@@ -73,5 +73,4 @@ comparator. Python, xarray, and numpy are not required to run RBM itself.
 | `expected/example.Spat` | Expected segment-to-location mapping |
 | `expected/example.Temp.nc` | Expected netCDF output schema and values |
 
-The data are a compact subset of the validated `77011225` DISes workflow used
-for RBM integration testing.
+The compact dataset provides a deterministic installation and workflow check.

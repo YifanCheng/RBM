@@ -17,6 +17,8 @@ module Netcdf_Output
     integer :: n_time_out = 0
     integer :: n_seg_out = 0
     integer :: n_hru_out = 0
+    integer :: current_day = 0
+    logical :: output_uses_noleap = .false.
     integer, allocatable :: hru_values(:)
     integer, allocatable :: hru_index_by_cell(:,:)
     logical, allocatable :: write_cell_segment(:,:)
@@ -33,25 +35,28 @@ contains
 
         if (status /= nf90_noerr) then
             write(*,*) 'NetCDF error: ', trim(context), ': ', trim(nf90_strerror(status))
-            stop
+            stop 1
         end if
     end subroutine NC_CHECK
 
-    subroutine NC_OUTPUT_INIT(output_file)
+    subroutine NC_OUTPUT_INIT(output_file,use_noleap)
         character(len=*), intent(in) :: output_file
+        logical, intent(in) :: use_noleap
         real(8) :: fill_value
 
+        output_uses_noleap = use_noleap
         call BUILD_OUTPUT_MAP()
         n_time_out = OUTPUT_DAY_COUNT()
         n_seg_out = nseg_out_num
 
         fill_value = ieee_value(fill_value, ieee_quiet_nan)
-        allocate(t_stream(n_hru_out,n_seg_out,n_time_out))
-        allocate(t_air(n_hru_out,n_seg_out,n_time_out))
-        allocate(t_headwater(n_hru_out,n_seg_out,n_time_out))
+        allocate(t_stream(n_hru_out,n_seg_out,1))
+        allocate(t_air(n_hru_out,n_seg_out,1))
+        allocate(t_headwater(n_hru_out,n_seg_out,1))
         t_stream = fill_value
         t_air = fill_value
         t_headwater = fill_value
+        current_day = 0
 
         call NC_CHECK(nf90_create(trim(output_file), nf90_clobber, ncid), 'create output file')
         call NC_CHECK(nf90_def_dim(ncid, 'time', n_time_out, time_dimid), 'define time dimension')
@@ -80,14 +85,26 @@ contains
         is_open = .true.
     end subroutine NC_OUTPUT_INIT
 
-    subroutine NC_OUTPUT_WRITE(time, nd, nr, ncell, ns, T_0, T_head, dbt, Q_inflow, Q_outflow)
+    subroutine NC_OUTPUT_WRITE(time, run_day, nr, ncell, ns, T_0, T_head, dbt, Q_inflow, Q_outflow)
         real(8), intent(in) :: time
-        integer, intent(in) :: nd, nr, ncell, ns
+        integer, intent(in) :: run_day, nr, ncell, ns
         real, intent(in) :: T_0, T_head, dbt, Q_inflow, Q_outflow
         integer :: seg_no, hru_idx, time_idx
 
         if (.not. is_open) return
-        if (nd .lt. 1 .or. nd .gt. n_time_out) return
+        if (run_day .lt. 1 .or. run_day .gt. n_time_out) return
+        if (current_day .eq. 0) then
+            current_day = run_day
+        else if (run_day .ne. current_day) then
+            if (run_day .lt. current_day) then
+                write(*,*) 'NetCDF output error: output days are not ordered.'
+                stop 1
+            end if
+            call FLUSH_OUTPUT_DAY()
+            call CLEAR_OUTPUT_DAY()
+            current_day = run_day
+        end if
+
         if (ncell .lt. 1 .or. ncell .gt. heat_cells) return
 
         seg_no = OUTPUT_SEGMENT_NUMBER(nr,ncell,ns)
@@ -96,7 +113,7 @@ contains
 
         hru_idx = hru_index_by_cell(ncell,seg_no)
         if (hru_idx .lt. 1) return
-        time_idx = nd
+        time_idx = 1
 
         t_stream(hru_idx,seg_no,time_idx) = ROUND2(T_0)
         t_headwater(hru_idx,seg_no,time_idx) = ROUND2(T_head)
@@ -106,9 +123,7 @@ contains
     subroutine NC_OUTPUT_CLOSE()
         if (.not. is_open) return
 
-        call NC_CHECK(nf90_put_var(ncid, stream_varid, t_stream), 'write T_stream')
-        call NC_CHECK(nf90_put_var(ncid, air_varid, t_air), 'write T_air')
-        call NC_CHECK(nf90_put_var(ncid, head_varid, t_headwater), 'write T_headwater')
+        call FLUSH_OUTPUT_DAY()
         call NC_CHECK(nf90_close(ncid), 'close output file')
 
         ncid = -1
@@ -120,6 +135,29 @@ contains
         if (allocated(hru_index_by_cell)) deallocate(hru_index_by_cell)
         if (allocated(write_cell_segment)) deallocate(write_cell_segment)
     end subroutine NC_OUTPUT_CLOSE
+
+    subroutine FLUSH_OUTPUT_DAY()
+        integer :: start(3), count(3)
+
+        if (current_day .lt. 1) return
+        start = (/1,1,current_day/)
+        count = (/n_hru_out,n_seg_out,1/)
+        call NC_CHECK(nf90_put_var(ncid, stream_varid, t_stream, start=start, count=count), &
+            'write T_stream day')
+        call NC_CHECK(nf90_put_var(ncid, air_varid, t_air, start=start, count=count), &
+            'write T_air day')
+        call NC_CHECK(nf90_put_var(ncid, head_varid, t_headwater, start=start, count=count), &
+            'write T_headwater day')
+    end subroutine FLUSH_OUTPUT_DAY
+
+    subroutine CLEAR_OUTPUT_DAY()
+        real(8) :: fill_value
+
+        fill_value = ieee_value(fill_value, ieee_quiet_nan)
+        t_stream = fill_value
+        t_air = fill_value
+        t_headwater = fill_value
+    end subroutine CLEAR_OUTPUT_DAY
 
     subroutine BUILD_OUTPUT_MAP()
         integer :: nr, nc, cell, seg_no, hru, existing, i
@@ -236,52 +274,37 @@ contains
     end function OUTPUT_SEGMENT_NUMBER
 
     integer function OUTPUT_DAY_COUNT()
-        integer :: start_doy, end_doy
-        start_doy = GREGORIAN_DAY_OF_YEAR(start_year,start_month,start_day)
-        end_doy = GREGORIAN_DAY_OF_YEAR(end_year,end_month,end_day)
-        OUTPUT_DAY_COUNT = end_doy - start_doy + 1
+        integer, external :: Julian
+
+        OUTPUT_DAY_COUNT = Julian(end_year,end_month,end_day) - &
+            Julian(start_year,start_month,start_day) + 1
         if (OUTPUT_DAY_COUNT .lt. 1) OUTPUT_DAY_COUNT = 0
     end function OUTPUT_DAY_COUNT
-
-    integer function NOLEAP_DAY_OF_YEAR(month, day)
-        integer, intent(in) :: month, day
-        integer, dimension(12) :: days_before
-        days_before = (/0,31,59,90,120,151,181,212,243,273,304,334/)
-        NOLEAP_DAY_OF_YEAR = days_before(month) + day
-    end function NOLEAP_DAY_OF_YEAR
-
-    integer function GREGORIAN_DAY_OF_YEAR(year, month, day)
-        integer, intent(in) :: year, month, day
-        integer, dimension(12) :: days_before_common, days_before_leap
-        days_before_common = (/0,31,59,90,120,151,181,212,243,273,304,334/)
-        days_before_leap = (/0,31,60,91,121,152,182,213,244,274,305,335/)
-        if (IS_LEAP_YEAR(year)) then
-            GREGORIAN_DAY_OF_YEAR = days_before_leap(month) + day
-        else
-            GREGORIAN_DAY_OF_YEAR = days_before_common(month) + day
-        end if
-    end function GREGORIAN_DAY_OF_YEAR
-
-    logical function IS_LEAP_YEAR(year)
-        integer, intent(in) :: year
-        IS_LEAP_YEAR = (mod(year,4) .eq. 0 .and. mod(year,100) .ne. 0) .or. mod(year,400) .eq. 0
-    end function IS_LEAP_YEAR
 
     subroutine WRITE_COORDINATES()
         integer, allocatable :: time_values(:), seg_values(:)
         real(8), allocatable :: hru_coord(:)
-        integer :: i, day_offset, start_doy
+        integer :: i, output_year, output_month, output_day, start_julian
+        integer, external :: Julian
 
         allocate(time_values(n_time_out))
         allocate(seg_values(n_seg_out))
         allocate(hru_coord(n_hru_out))
 
-        start_doy = NOLEAP_DAY_OF_YEAR(start_month,start_day)
-        do i = 1,n_time_out
-            day_offset = i - 1
-            if (IS_LEAP_YEAR(start_year) .and. start_doy + day_offset .gt. 59) day_offset = day_offset + 1
-            time_values(i) = day_offset
-        end do
+        if (output_uses_noleap) then
+            output_year = start_year
+            output_month = start_month
+            output_day = start_day
+            start_julian = Julian(start_year,start_month,start_day)
+            do i = 1,n_time_out
+                time_values(i) = Julian(output_year,output_month,output_day) - start_julian
+                call ADVANCE_NOLEAP_DATE(output_year,output_month,output_day)
+            end do
+        else
+            do i = 1,n_time_out
+                time_values(i) = i - 1
+            end do
+        end if
         do i = 1,n_seg_out
             seg_values(i) = i
         end do
@@ -295,6 +318,22 @@ contains
 
         deallocate(time_values,seg_values,hru_coord)
     end subroutine WRITE_COORDINATES
+
+    subroutine ADVANCE_NOLEAP_DATE(year,month,day)
+        integer, intent(inout) :: year, month, day
+        integer, dimension(12) :: days_in_month
+
+        days_in_month = (/31,28,31,30,31,30,31,31,30,31,30,31/)
+        day = day + 1
+        if (day .gt. days_in_month(month)) then
+            day = 1
+            month = month + 1
+            if (month .gt. 12) then
+                month = 1
+                year = year + 1
+            end if
+        end if
+    end subroutine ADVANCE_NOLEAP_DATE
 
     real(8) function ROUND2(value)
         real, intent(in) :: value

@@ -7,6 +7,7 @@ Subroutine BEGIN(param_file,spatial_file)
     use Block_Control
 #ifdef USE_NETCDF
     use Netcdf_Topology
+    use Netcdf_Reservoir
 #endif
     !
     implicit none
@@ -149,18 +150,26 @@ Subroutine BEGIN(param_file,spatial_file)
     !     Read in reservoir information
     !
     if(reservoir) then
-        read(37,*) ! Skip the first line in reservoir file
-        do nreservoir = 1,nres
-            read(37,*) dam_number(nreservoir),  &
-                       dam_grid_lat(nreservoir), dam_grid_lon(nreservoir), &
-                       res_depth_meter(nreservoir), res_width_meter(nreservoir), &
-                       res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
-                       res_start_node(nreservoir), res_end_node(nreservoir)
+#ifdef USE_NETCDF
+        if (control_file_mode .and. LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+            call READ_RESERVOIR_NC_PARAMETERS()
+        else
+#endif
+            read(37,*) ! Skip the first line in reservoir file
+            do nreservoir = 1,nres
+                read(37,*) dam_number(nreservoir),  &
+                           dam_grid_lat(nreservoir), dam_grid_lon(nreservoir), &
+                           res_depth_meter(nreservoir), res_width_meter(nreservoir), &
+                           res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
+                           res_start_node(nreservoir), res_end_node(nreservoir)
 
-            print *, dam_number(nreservoir), res_depth_meter(nreservoir), &
-                     res_width_meter(nreservoir), res_area_km2(nreservoir), &
-                     res_start_node(nreservoir), res_end_node(nreservoir)
-        end do
+                print *, dam_number(nreservoir), res_depth_meter(nreservoir), &
+                         res_width_meter(nreservoir), res_area_km2(nreservoir), &
+                         res_start_node(nreservoir), res_end_node(nreservoir)
+            end do
+#ifdef USE_NETCDF
+        end if
+#endif
     end if
     !
     !     Card Group IIb. Reach characteristics

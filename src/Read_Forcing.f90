@@ -7,6 +7,7 @@ SUBROUTINE Read_Forcing
     USE Block_Control
 #ifdef USE_NETCDF
     USE Netcdf_Input
+    USE Netcdf_Reservoir
 #endif
     !
     IMPLICIT NONE
@@ -137,19 +138,27 @@ SUBROUTINE Read_Forcing
         end if
     end do
     !
-    ! Legacy runs retain the original reads. Control-file runs skip
+    ! Two-argument runs read the ASCII forcing directly. Control-file runs skip
     ! reservoir inputs when reservoir simulation is disabled.
     if (.not. control_file_mode .or. reservoir) then
-        res_storage(:,n2)=res_storage(:,n1)
-        read(38,*) ! Skip reading the date in storage file
-        do nreservoir=1,nres
-            read(38,*) res_storage(nreservoir, n1)
-        end do
-        read(39,*) ! Skip reading the date in selective withdraw file
-        do nreservoir=1,nres
-            read(39,*) eh_withdraw_ratio(nreservoir, n1) &
-                      ,eh_withdraw_ratio(nreservoir, n2)
-        end do
+#ifdef USE_NETCDF
+        if (control_file_mode .and. LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+            call READ_RESERVOIR_NC_DAY(ndays)
+        else
+#endif
+            res_storage(:,n2)=res_storage(:,n1)
+            read(38,*) ! Skip reading the date in storage file
+            do nreservoir=1,nres
+                read(38,*) res_storage(nreservoir, n1)
+            end do
+            read(39,*) ! Skip reading the date in selective withdraw file
+            do nreservoir=1,nres
+                read(39,*) eh_withdraw_ratio(nreservoir, n1) &
+                          ,eh_withdraw_ratio(nreservoir, n2)
+            end do
+#ifdef USE_NETCDF
+        end if
+#endif
     end if
     !
     ! Call the water balance subroutine

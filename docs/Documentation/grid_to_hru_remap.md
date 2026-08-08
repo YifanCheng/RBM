@@ -43,14 +43,11 @@ The spatial weight file must contain:
 | `j_index(data)` | Source grid y/lat index, 1-based |
 
 RBM normalizes the positive weights for each HRU/reach before computing the
-weighted average, matching the existing Python remapping workflow.
+weighted average.
 
-For preprocessing compatibility, this weight-file schema is consumed
-positionally in the mizuRoute reach order. The historical notebook and its
-ASCII energy output use that ordering even when `polyid` is stored in a
-different order. RBM validates IDs and indices, but changing this path to
-`polyid` lookup changes the established reference results. Weight files should
-therefore be generated for the same reach set and order as the flow file.
+RBM consumes weight-file records positionally in mizuRoute reach order. The
+`polyid` values are validated but are not used to reorder the data. Generate the
+weight file for the same reach set and order used by the flow file.
 
 ## Direct Grid-Cell Mapping
 
@@ -64,15 +61,13 @@ Flow and meteorology time axes are also resolved independently. Each file must
 provide one consecutive daily record and a `time` coordinate with units of
 `days since YYYY-MM-DD`.
 
-The older VIC-style meteorology schema can be selected with control entries such
+The VIC-style meteorology schema can be selected with control entries such
 as `OUT_AIR_TEMP`, `OUT_VP`, `OUT_SWDOWN`, `OUT_LWDOWN`, `OUT_PRESSURE`,
 `OUT_WIND`, and optional `OUT_DENSITY`.
 
 ## Optional Local Flow
 
-Routed streamflow alone does not contain the local runoff contribution used by
-all legacy RBM cases. To reproduce a nonzero ASCII `Q_local` column, supply both
-of these control entries:
+Routed streamflow alone does not contain local runoff. To calculate a nonzero `Q_local`, supply both of these control entries:
 
 ```text
 <local_flow_file> /path/to/vic_runoff_and_baseflow.nc
@@ -92,10 +87,13 @@ Q_local [cfs] = (runoff + baseflow) [mm/day] * area [m2]
                 * (1 / 0.3048)^3 / 86400 / 1000
 ```
 
-The result is rounded to 0.1 cfs, matching the legacy ASCII forcing format.
-`Q_diff` remains zero, as in the supplied preprocessing script. If the two
-optional files are omitted, `Q_local` remains zero for compatibility with the
-previous integrated netCDF behavior.
+The result is rounded to 0.1 cfs, matching the precision of RBM flow forcing.
+For netCDF forcing, RBM sets `Q_diff` to zero. If the two optional files are
+omitted, `Q_local` is also zero.
+
+Include the local-flow inputs whenever local runoff is part of the forcing
+dataset. Use consistent runoff, baseflow, and area dataset versions across runs;
+changing any of these inputs changes the calculated local discharge.
 
 ## Notes
 
@@ -109,6 +107,5 @@ previous integrated netCDF behavior.
 - Direct gridded streamflow supplies routed discharge. Nonzero `Q_local`
   requires the separate runoff/baseflow and grid-area inputs described above;
   it cannot be reconstructed exactly from regulated routed streamflow alone.
-- The implementation follows the old preprocessing workflow's positional
-  reach-order behavior so generated RBM results match the existing reference
-  workflow as closely as possible.
+- Vector forcing values must use the routed-flow location order documented in
+  the control-file reference.

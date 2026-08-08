@@ -21,4 +21,4 @@ python3 tools/compare_rbm_outputs.py "$expected.Temp" "$output.Temp" --temperatu
 cmp "$expected.Spat" "$output.Spat"
 cmp "$expected.Temp.nc" "$output.Temp.nc"
 
-echo "PASS: integrated netCDF example matches the included reference outputs."
+echo "PASS: netCDF example matches the included expected outputs."

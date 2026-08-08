@@ -2,7 +2,7 @@
 
 RBM supports two topology inputs:
 
-- `<network_file>`: the legacy ASCII Network file. This remains supported.
+- `<network_file>`: the ASCII Network file. This remains supported.
 - `<topology_file>`: a netCDF topology file read by `rbm10_VIC_nc`.
 
 In `<topology_file>` mode, run configuration that used to live in the Network
@@ -50,8 +50,8 @@ Use `<topology_file>` instead of `<network_file>`:
 ```
 
 When `<reservoir> False`, no reservoir input files are required. When it is
-`True`, also provide `<reservoir_file>`, `<reservoir_storage_file>`, and
-`<reservoir_sel_withdraw_file>`, and set `<nres>` to the number of reservoirs.
+`True`, set `<nres>` and provide a separate `<reservoir_data_file>` or the
+three ASCII reservoir files. Reservoir assignments remain in `res_num(cell)`.
 
 Run:
 
@@ -111,17 +111,17 @@ Optional `cell` variables for direct gridded forcing:
 | `grid_lat(cell)` | float | Latitude used to locate this river cell in gridded forcing |
 | `grid_lon(cell)` | float | Longitude used to locate this river cell in gridded forcing |
 
-`grid_lat` and `grid_lon` must be supplied together. Older topology files remain
-readable for ID-based forcing. The transition utility writes both variables and
-preserves decimal coordinates from grid-based legacy Network files.
+`grid_lat` and `grid_lon` must be supplied together. Topology files without
+grid coordinates remain readable for ID-based forcing. The transition utility writes both variables and
+preserves decimal coordinates from grid-based ASCII Network files.
 
-## Transition Utility
+## Conversion Utility
 
-Existing legacy Network files can be converted to the netCDF topology schema:
+Existing ASCII Network files can be converted to the netCDF topology schema:
 
 ```sh
-./network_to_netcdf_topology /path/to/old_Network /path/to/topology.nc
+./network_to_netcdf_topology /path/to/input_Network /path/to/topology.nc
 ```
 
-This is a transition/helper utility. The RBM run itself does not read the old
-Network file when `<topology_file>` is used.
+This utility is needed only when converting an ASCII Network file. When
+`<topology_file>` is used, RBM reads topology exclusively from the netCDF file.

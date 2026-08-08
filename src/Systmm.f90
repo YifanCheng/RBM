@@ -7,8 +7,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     use Block_Control
     use data_type
 #ifdef USE_NETCDF
-    use Netcdf_Output
-    use Netcdf_Input, only: NC_INPUT_CLOSE
+    use Netcdf_Output, only: NC_OUTPUT_INIT, NC_OUTPUT_CLOSE
+    use Netcdf_Input, only: NC_INPUT_INIT, NC_INPUT_CLOSE, flow_time_calendar
+    use Netcdf_Reservoir
 #endif
     !
     Implicit None
@@ -54,6 +55,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
 
     logical:: DONE, end_of_reservoir
     logical:: ns_res_pres
+#ifdef USE_NETCDF
+    logical:: output_uses_noleap
+#endif
     !
     !
     ! Allocate the arrays
@@ -201,7 +205,13 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     end if
 #ifdef USE_NETCDF
     if (control_write_netcdf) then
-        call NC_OUTPUT_INIT(TRIM(temp_file)//'.nc')
+        output_uses_noleap = .true.
+        if (TRIM(control_input_format) .eq. "netcdf") then
+            call NC_INPUT_INIT()
+            output_uses_noleap = TRIM(flow_time_calendar) .eq. "noleap" .or. &
+                TRIM(flow_time_calendar) .eq. "365_day"
+        end if
+        call NC_OUTPUT_INIT(TRIM(temp_file)//'.nc',output_uses_noleap)
     end if
 #else
     if (control_write_netcdf) then
@@ -485,7 +495,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                         if (ncell.eq.1827.and.nd.eq.197) write(*,*) nyear,nd,nr,ncell,ns,T_0
                         do nseg_temp=1,nseg_out_num
                             if (nseg_out(nr,ncell,nseg_temp).eq.ns) then
-                                call WRITE(time,nd,nr,ncell,ns,T_0,T_head(nr),dbt(ncell), &
+                                call WRITE(time,nd,ndays,nr,ncell,ns,T_0,T_head(nr),dbt(ncell), &
                                     Q_inflow_out, Q_outflow_out)
                             if (ncell.eq.1827) write(89,*)nyear,nd,nr,ncell,ns,T_0,temp_equil,time_equil,deriv_2nd*dt_comp**2/2
                             end if
@@ -661,7 +671,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                     do nsegment=ns_res_start(res_no),ns_res_end(res_no)
                                         do nseg_temp=1,nseg_out_num
                                             if (nseg_out(nr,ncell,nseg_temp).eq.nsegment) then
-                                                call WRITE(time,nd,nr,ncell,nsegment,T_0, &
+                                                call WRITE(time,nd,ndays,nr,ncell,nsegment,T_0, &
                                                     T_head(nr),dbt(segment_cell(nr,nsegment)), &
                                                     Q_res_inflow(res_no), Q_res_outflow(res_no)) !, &
 !                                                    res_storage_post, T_res(res_no))
@@ -726,6 +736,9 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     end if
     if (control_write_netcdf) then
         call NC_OUTPUT_CLOSE()
+    end if
+    if (LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+        call CLOSE_RESERVOIR_NC()
     end if
 #endif
 950 return

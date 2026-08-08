@@ -8,7 +8,7 @@
 ! and <heat_file> to the preprocessed ASCII forcing files.
 
 ! Topology input:
-!   Use <network_file> for the legacy ASCII Network file, or
+!   Use <network_file> for the ASCII Network file, or
 !   use <topology_file> for the new netCDF topology file.
 ! Provide only one of these in a normal run.
 <topology_file> /path/to/dises_77011225_topology.nc
@@ -18,12 +18,16 @@
 ! Optional grid-to-HRU remapping weights for raw grid meteorology files.
 ! Omit this when <heat_file> is already HRU/reach-remapped.
 ! <heat_remap_file> /path/to/spatialweights_dises_09081000_77011225.nc
-! Optional preprocessing-equivalent local flow. Supply both files or neither.
+! Optional local-flow calculation. Supply both files or neither.
 ! The local file must provide daily OUT_RUNOFF and OUT_BASEFLOW in mm; the
 ! area file must provide static grid-cell area in m2.
+! Include these inputs whenever the basin workflow expects nonzero Q_local.
 ! <local_flow_file> /path/to/vic_runoff_and_baseflow.nc
 ! <area_file> /path/to/vic_grid_area.nc
 ! Required only when <reservoir> is True:
+! Preferred consolidated netCDF input:
+! <reservoir_data_file> /path/to/reservoir_data.nc
+! Alternatively, use all three ASCII reservoir inputs:
 ! <reservoir_file> /path/to/reservoir_parameters.txt
 ! <reservoir_storage_file> /path/to/reservoir_storage.txt
 ! <reservoir_sel_withdraw_file> /path/to/reservoir_withdrawal.txt
@@ -50,6 +54,17 @@
 ! Flow netCDF variables.
 <flow_var> KWroutedRunoff
 <flow_id_var> reachID
+
+! Hydraulic options. Defaults use the standard RBM coefficients.
+! Set these values for the basin and streamflow product being used.
+<flow_units> m3/s
+<a_d> 0.408
+<b_d> 0.392
+<a_w> 4.346
+<b_w> 0.520
+<min_flow> 5.0
+<min_velocity> 0.5
+<min_depth> 5.0
 
 ! Optional local-flow variable overrides.
 ! <local_runoff_var> OUT_RUNOFF

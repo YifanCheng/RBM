@@ -18,7 +18,7 @@ program Network_To_Netcdf_Topology
 
     argc = command_argument_count()
     if (argc .ne. 2) then
-        write(*,*) 'Usage: network_to_netcdf_topology <legacy_Network_file> <topology.nc>'
+        write(*,*) 'Usage: network_to_netcdf_topology <ascii_Network_file> <topology.nc>'
         stop 1
     end if
 
@@ -190,7 +190,7 @@ contains
         call DEF_REAL_VAR(ncid, cell_dimid, 'ndelta', ndelta_varid)
         call DEF_INT_VAR(ncid, cell_dimid, 'res_num', res_num_varid)
         call CHECK(nf90_put_att(ncid, nf90_global, 'title', 'RBM river topology'), 'write title')
-        call CHECK(nf90_put_att(ncid, nf90_global, 'source_schema', 'legacy RBM Network topology'), 'write source schema')
+        call CHECK(nf90_put_att(ncid, nf90_global, 'source_schema', 'ASCII RBM Network topology'), 'write source schema')
         call CHECK(nf90_enddef(ncid), 'end define mode')
 
         call CHECK(nf90_put_var(ncid, nreach_varid, nreach), 'write nreach')

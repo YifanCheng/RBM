@@ -1,6 +1,6 @@
 Module Block_Control
 !
-! Centralized run-control values. Legacy two-argument runs leave these
+! Centralized run-control values. Two-argument ASCII runs leave these
 ! defaults untouched and continue to read configuration from the Network file.
 !
     implicit none
@@ -12,6 +12,7 @@ Module Block_Control
     character(len=200) :: control_heat_remap_file = ""
     character(len=200) :: control_local_flow_file = ""
     character(len=200) :: control_area_file = ""
+    character(len=200) :: control_reservoir_data_file = ""
     character(len=200) :: control_reservoir_file = ""
     character(len=200) :: control_reservoir_storage_file = ""
     character(len=200) :: control_reservoir_sel_withdraw_file = ""
@@ -40,5 +41,13 @@ Module Block_Control
     character(len=64) :: control_local_runoff_var = "OUT_RUNOFF"
     character(len=64) :: control_local_baseflow_var = "OUT_BASEFLOW"
     character(len=64) :: control_area_var = "area"
+    character(len=32) :: control_flow_units = "m3/s"
+    real(8) :: control_a_d = 0.408d0
+    real(8) :: control_b_d = 0.392d0
+    real(8) :: control_a_w = 4.346d0
+    real(8) :: control_b_w = 0.520d0
+    real(8) :: control_min_flow = 5.0d0
+    real(8) :: control_min_velocity = 0.5d0
+    real(8) :: control_min_depth = 5.0d0
 !
 end module Block_Control

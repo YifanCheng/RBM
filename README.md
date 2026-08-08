@@ -14,15 +14,16 @@ This is the public source code repository for the **River Basin Model**, **RBM**
 
 RBM can now run directly from a centralized control file using:
 
-- legacy ASCII forcing or netCDF forcing;
-- a legacy ASCII Network file or a netCDF river topology file;
+- ASCII forcing or netCDF forcing;
+- an ASCII Network file or a netCDF river topology file;
 - HRU-ready meteorology or raw gridded meteorology with internal grid-to-HRU
   remapping;
 - optional local runoff and baseflow conversion to RBM local flow;
 - ASCII, netCDF, or both temperature output formats;
-- optional reservoir and selective-withdrawal simulation.
+- optional reservoir and selective-withdrawal simulation using one consolidated
+  netCDF file or the three-file ASCII reservoir input.
 
-The legacy two-argument ASCII command remains supported.
+The two-argument ASCII command remains supported.
 
 ### Build
 
@@ -58,27 +59,51 @@ file, and expected outputs:
 ./src/rbm10_VIC_nc examples/netcdf_grid_remap/example.control
 ~~~
 
-Run and validate it in one command:
+Run either end-to-end validator directly:
 
 ~~~sh
 examples/netcdf_grid_remap/run_and_validate.sh
+examples/netcdf_reservoir/run_and_validate.sh
 ~~~
 
-See [the integrated example](examples/netcdf_grid_remap/README.md) for file
-descriptions and [the user run guide](docs/Documentation/run_RBM.md) for all
-control options, input schemas, and legacy compatibility.
+Run both validators with the make target:
+
+~~~sh
+cd src
+make test_netcdf
+~~~
+
+See [the grid-remapping example](examples/netcdf_grid_remap/README.md) for file
+descriptions and the [user guide](docs/Documentation/user_guide.md) for
+the complete installation and run procedure. The
+[control-file reference](docs/Documentation/control_file.md) documents every
+supported option, and the [output reference](docs/Documentation/output_files.md)
+documents generated files.
+
+Reservoir users can run `examples/netcdf_reservoir/run_and_validate.sh`. It
+exercises consolidated reservoir netCDF input and internal local-flow
+calculation.
 
 ### Main commands
 
 ~~~sh
-# Modern control-file mode
+# netCDF control-file mode
 ./src/rbm10_VIC_nc /path/to/run.control
 
 # ASCII-only control-file mode
 ./src/rbm10_VIC /path/to/run.control
 
-# Legacy mode
+# Two-argument ASCII mode
 ./src/rbm10_VIC input_prefix output_prefix
+~~~
+
+Reservoir users can convert existing ASCII parameter, storage, and withdrawal
+files without Python:
+
+~~~sh
+cd src
+make reservoir_to_netcdf
+./reservoir_to_netcdf parameters.txt storage.txt withdrawal.txt reservoir_data.nc
 ~~~
 
 RBM was first applied to the development of a water temperature Total Maximum Daily Load (TMDL) for the Columbia

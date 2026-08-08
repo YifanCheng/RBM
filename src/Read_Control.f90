@@ -51,6 +51,8 @@ SUBROUTINE SET_CONTROL_VALUE(name,value)
         control_local_flow_file = TRIM(value)
     case ("area_file")
         control_area_file = TRIM(value)
+    case ("reservoir_data_file")
+        control_reservoir_data_file = TRIM(value)
     case ("reservoir_file")
         control_reservoir_file = TRIM(value)
     case ("reservoir_storage_file")
@@ -103,10 +105,40 @@ SUBROUTINE SET_CONTROL_VALUE(name,value)
         control_local_baseflow_var = TRIM(value)
     case ("area_var")
         control_area_var = TRIM(value)
+    case ("flow_units")
+        control_flow_units = TRIM(value)
+    case ("a_d")
+        call READ_CONTROL_REAL(name,value,control_a_d)
+    case ("b_d")
+        call READ_CONTROL_REAL(name,value,control_b_d)
+    case ("a_w")
+        call READ_CONTROL_REAL(name,value,control_a_w)
+    case ("b_w")
+        call READ_CONTROL_REAL(name,value,control_b_w)
+    case ("min_flow")
+        call READ_CONTROL_REAL(name,value,control_min_flow)
+    case ("min_velocity")
+        call READ_CONTROL_REAL(name,value,control_min_velocity)
+    case ("min_depth")
+        call READ_CONTROL_REAL(name,value,control_min_depth)
     case default
         write(*,*) "Ignoring unknown control variable: ",TRIM(name)
     end select
 END SUBROUTINE SET_CONTROL_VALUE
+
+SUBROUTINE READ_CONTROL_REAL(name,value,result)
+    implicit none
+    character(len=*), intent(in) :: name,value
+    real(8), intent(out) :: result
+    integer :: ios
+
+    read(value,*,iostat=ios) result
+    if (ios .ne. 0) then
+        write(*,*) "Invalid numeric control value for <",TRIM(name),">: '",TRIM(value),"'"
+        stop 1
+    end if
+END SUBROUTINE READ_CONTROL_REAL
+
 
 LOGICAL FUNCTION CONTROL_LOGICAL(value)
     implicit none
@@ -139,6 +171,24 @@ SUBROUTINE CHECK_CONTROL(control_file)
     end if
     if (LEN_TRIM(control_output_format) .eq. 0) then
         control_output_format = control_input_format
+    end if
+    if (TRIM(control_flow_units) .ne. "m3/s" .and. &
+        TRIM(control_flow_units) .ne. "cfs") then
+        write(*,*) "Invalid <flow_units> in ",TRIM(control_file),": '", &
+            TRIM(control_flow_units),"' (must be 'm3/s' or 'cfs')"
+        stop 1
+    end if
+    if (control_a_d .le. 0.0d0 .or. control_a_w .le. 0.0d0 .or. &
+        control_b_d .lt. 0.0d0 .or. control_b_w .lt. 0.0d0) then
+        write(*,*) "Invalid hydraulic coefficients in ",TRIM(control_file), &
+            ": a_d/a_w must be positive and b_d/b_w must be nonnegative."
+        stop 1
+    end if
+    if (control_min_flow .lt. 0.0d0 .or. control_min_velocity .le. 0.0d0 .or. &
+        control_min_depth .le. 0.0d0) then
+        write(*,*) "Invalid hydraulic limits in ",TRIM(control_file), &
+            ": min_flow must be nonnegative; min_velocity/min_depth must be positive."
+        stop 1
     end if
     if (TRIM(control_output_format) .ne. "ascii" .and. &
         TRIM(control_output_format) .ne. "netcdf" .and. &
@@ -187,18 +237,28 @@ SUBROUTINE CHECK_CONTROL(control_file)
         end if
     end if
     !
-    ! Reservoir files are required only when reservoir simulation is enabled.
+    ! Reservoir runs accept either one netCDF file or the three ASCII files.
     if (control_reservoir) then
         if (control_nres .le. 0) then
             write(*,*) "Invalid control in ",TRIM(control_file), &
                 ": nres must be greater than zero when reservoir is True."
             stop 1
         end if
-        if (LEN_TRIM(control_reservoir_file) .eq. 0) call MISSING_CONTROL(control_file,"reservoir_file")
-        if (LEN_TRIM(control_reservoir_storage_file) .eq. 0) &
-            call MISSING_CONTROL(control_file,"reservoir_storage_file")
-        if (LEN_TRIM(control_reservoir_sel_withdraw_file) .eq. 0) &
-            call MISSING_CONTROL(control_file,"reservoir_sel_withdraw_file")
+        if (LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+            if (LEN_TRIM(control_reservoir_file) .gt. 0 .or. &
+                LEN_TRIM(control_reservoir_storage_file) .gt. 0 .or. &
+                LEN_TRIM(control_reservoir_sel_withdraw_file) .gt. 0) then
+                write(*,*) "Invalid control in ",TRIM(control_file), &
+                    ": provide reservoir_data_file or the three ASCII reservoir files, not both."
+                stop 1
+            end if
+        else
+            if (LEN_TRIM(control_reservoir_file) .eq. 0) call MISSING_CONTROL(control_file,"reservoir_file")
+            if (LEN_TRIM(control_reservoir_storage_file) .eq. 0) &
+                call MISSING_CONTROL(control_file,"reservoir_storage_file")
+            if (LEN_TRIM(control_reservoir_sel_withdraw_file) .eq. 0) &
+                call MISSING_CONTROL(control_file,"reservoir_sel_withdraw_file")
+        end if
     else
         if (control_nres .ne. 0) then
             write(*,*) "Invalid control in ",TRIM(control_file), &

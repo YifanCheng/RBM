@@ -41,6 +41,9 @@ PROGRAM RBM10_VIC
     !use SYSTM
     !
     use Block_Control
+#ifdef USE_NETCDF
+    use Netcdf_Reservoir
+#endif
     implicit none
     !
     !
@@ -67,7 +70,7 @@ PROGRAM RBM10_VIC
     if (numarg .ne. 1 .and. numarg .ne. 2) then
         write (*,*) 'Invalid number of arguments'
         write (*,*) ' '
-        write (*,*) 'Legacy mode:'
+        write (*,*) 'Two-argument ASCII mode:'
         write (*,*) '  $ <program-name> <input_prefix> <output_prefix>'
         write (*,*) 'Control-file mode:'
         write (*,*) '  $ <program-name> <control_file>'
@@ -154,7 +157,8 @@ PROGRAM RBM10_VIC
     !
     !     Open file with reservoir parameters
     !
-    if (.not. control_file_mode .or. control_reservoir) then
+    if (.not. control_file_mode .or. &
+        (control_reservoir .and. LEN_TRIM(control_reservoir_data_file) .eq. 0)) then
         open(unit=37,FILE=TRIM(reservoir_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     !
     !     Open file with reservoir storage data
@@ -165,6 +169,12 @@ PROGRAM RBM10_VIC
     !
         open(unit=39,FILE=TRIM(reservoir_sel_withdraw_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     end if
+#ifndef USE_NETCDF
+    if (control_file_mode .and. LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+        write(*,*) 'NetCDF reservoir input requires rbm10_VIC_nc.'
+        stop 1
+    end if
+#endif
     !
     !     Call systems programs to get started
     !
@@ -189,7 +199,8 @@ PROGRAM RBM10_VIC
         CLOSE(35)
         CLOSE(36)
     end if
-    if (.not. control_file_mode .or. control_reservoir) then
+    if (.not. control_file_mode .or. &
+        (control_reservoir .and. LEN_TRIM(control_reservoir_data_file) .eq. 0)) then
         CLOSE(37)
         CLOSE(38)
         CLOSE(39)

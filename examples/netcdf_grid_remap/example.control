@@ -17,4 +17,12 @@
 <output_format> both
 <flow_var> KWroutedRunoff
 <flow_id_var> reachID
+<flow_units> m3/s
+<a_d> 0.408
+<b_d> 0.392
+<a_w> 4.346
+<b_w> 0.520
+<min_flow> 5.0
+<min_velocity> 0.5
+<min_depth> 5.0
 <heat_tair_var> TSA

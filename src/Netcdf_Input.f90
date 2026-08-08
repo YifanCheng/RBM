@@ -6,6 +6,7 @@ module Netcdf_Input
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use Netcdf_Reservoir
     implicit none
 
     integer :: flow_ncid = -1
@@ -261,7 +262,12 @@ contains
         call NORMALIZE_UNITS(normalized)
         select case (trim(unit_class))
         case ("flow")
-            valid = trim(normalized) .eq. "m3/s" .or. trim(normalized) .eq. "m3s-1"
+            if (trim(control_flow_units) .eq. "cfs") then
+                valid = trim(normalized) .eq. "cfs" .or. trim(normalized) .eq. "ft3/s" .or. &
+                    trim(normalized) .eq. "ft3s-1"
+            else
+                valid = trim(normalized) .eq. "m3/s" .or. trim(normalized) .eq. "m3s-1"
+            end if
         case ("temperature_k")
             valid = trim(normalized) .eq. "k" .or. trim(normalized) .eq. "kelvin"
         case ("temperature_c")
@@ -596,7 +602,7 @@ contains
         else
             write(*,*) "  Q_local           : 0 (no local_flow_file and area_file configured)"
         end if
-        write(*,*) "  Q_diff            : 0 (preprocessing-compatible)"
+        write(*,*) "  Q_diff            : 0 (netCDF forcing)"
         write(*,*) "------------------------------------------------------------"
 
         nc_forcing_open = .true.
@@ -667,10 +673,12 @@ contains
                 stop 1
             end if
             axis_days(i) = floor(time_values(i) + 1.0e-6_8)
-            if (i .gt. 1 .and. axis_days(i) .ne. axis_days(i-1) + 1) then
-                write(*,*) "NetCDF input error: ", trim(label), &
-                    " time coordinate must contain one consecutive record per day."
-                stop 1
+            if (i .gt. 1) then
+                if (axis_days(i) .ne. axis_days(i-1) + 1) then
+                    write(*,*) "NetCDF input error: ", trim(label), &
+                        " time coordinate must contain one consecutive record per day."
+                    stop 1
+                end if
             end if
         end do
         deallocate(time_values)
@@ -768,13 +776,17 @@ contains
             write(*,*) "NetCDF input error: ", trim(label), " grid coordinates contain missing values."
             stop 1
         end if
-        if (nlat .gt. 1 .and. any(abs(lat_values(2:) - lat_values(:nlat-1)) .le. epsilon(1.0_8))) then
-            write(*,*) "NetCDF input error: ", trim(label), " latitude coordinate contains duplicates."
-            stop 1
+        if (nlat .gt. 1) then
+            if (any(abs(lat_values(2:) - lat_values(:nlat-1)) .le. epsilon(1.0_8))) then
+                write(*,*) "NetCDF input error: ", trim(label), " latitude coordinate contains duplicates."
+                stop 1
+            end if
         end if
-        if (nlon .gt. 1 .and. any(abs(lon_values(2:) - lon_values(:nlon-1)) .le. epsilon(1.0_8))) then
-            write(*,*) "NetCDF input error: ", trim(label), " longitude coordinate contains duplicates."
-            stop 1
+        if (nlon .gt. 1) then
+            if (any(abs(lon_values(2:) - lon_values(:nlon-1)) .le. epsilon(1.0_8))) then
+                write(*,*) "NetCDF input error: ", trim(label), " longitude coordinate contains duplicates."
+                stop 1
+            end if
         end if
         do cell = 1, heat_cells
             i_index(cell) = FIND_GRID_COORD(real(grid_lon(cell),kind=8), lon_values, cell, label, "longitude")
@@ -1117,8 +1129,6 @@ contains
         integer :: nreservoir, n1, n2
         integer :: flow_day_index, heat_day_index, local_day_index
         real :: q_cfs, q_unused
-        real :: min_flow = 5.0
-        real :: min_depth = 5.0
 
         call NC_INPUT_INIT()
         flow_day_index = flow_start_index + ndays - 1
@@ -1137,7 +1147,7 @@ contains
                 call READ_FLOW_CELL(flow_day_index, ncell, q_cfs, q_unused, Q_diff(no_heat), depth(no_heat), &
                     width(no_heat), u(no_heat), Q_local(no_heat))
                 Q_out(no_heat) = q_cfs
-                call APPLY_FLOW_LIMITS(no_heat, min_flow, min_depth)
+                call APPLY_FLOW_LIMITS(no_heat, real(control_min_flow), real(control_min_depth))
                 if (Q_diff(no_heat) .gt. 0) write(*,*) 'Q_diff is not equal to 0', no_heat, Q_diff(no_heat)
                 if (u(no_heat) .lt. 0.01) u(no_heat) = 0.01
                 call READ_HEAT_CELL(heat_day_index, no_heat)
@@ -1171,16 +1181,20 @@ contains
         end do
 
         if (.not. control_file_mode .or. reservoir) then
-            res_storage(:,n2) = res_storage(:,n1)
-            read(38,*)
-            do nreservoir = 1, nres
-                read(38,*) res_storage(nreservoir, n1)
-            end do
+            if (control_file_mode .and. LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+                call READ_RESERVOIR_NC_DAY(ndays)
+            else
+                res_storage(:,n2) = res_storage(:,n1)
+                read(38,*)
+                do nreservoir = 1, nres
+                    read(38,*) res_storage(nreservoir, n1)
+                end do
 
-            read(39,*)
-            do nreservoir = 1, nres
-                read(39,*) eh_withdraw_ratio(nreservoir, n1), eh_withdraw_ratio(nreservoir, n2)
-            end do
+                read(39,*)
+                do nreservoir = 1, nres
+                    read(39,*) eh_withdraw_ratio(nreservoir, n1), eh_withdraw_ratio(nreservoir, n2)
+                end do
+            end if
         end if
 
         call Water_Balance
@@ -1195,10 +1209,7 @@ contains
         real(kind=8) :: q_cms, q_for_hydraulics, depth_calc, width_calc, velocity_calc
         real :: q_vector_cfs, depth_vector, width_vector, velocity_vector
         real(kind=8), parameter :: cms_to_cfs = (1000.0d0/25.4d0/12.0d0)**3
-        real, parameter :: legacy_cms_to_cfs = 1.0/0.028316847
-        real(kind=8), parameter :: depth_a = 0.408d0, depth_b = 0.392d0
-        real(kind=8), parameter :: width_a = 4.346d0, width_b = 0.520d0
-        real(kind=8), parameter :: min_flow = 5.0d0, min_velocity = 0.5d0
+        real, parameter :: vector_cms_to_cfs = 1.0/0.028316847
 
         if (grid_flow_schema) then
             write(context,"(A,I0,A,I0)") "read gridded flow day=",day_index," cell=",cell_index
@@ -1215,31 +1226,38 @@ contains
             write(*,*) "NetCDF input error: missing streamflow value in ", trim(context)
             stop 1
         end if
-        ! Preserve each established preprocessing convention: gridded inputs follow the
-        ! supplied script, while vector inputs retain the legacy converter arithmetic.
+        ! Apply the conversion precision associated with each supported forcing schema.
         if (grid_flow_schema) then
-            q_for_hydraulics = q_cms * cms_to_cfs
+            if (trim(control_flow_units) .eq. "cfs") then
+                q_for_hydraulics = q_cms
+            else
+                q_for_hydraulics = q_cms * cms_to_cfs
+            end if
             if (q_for_hydraulics .gt. 0.0d0) then
-                depth_calc = depth_a * (q_for_hydraulics**depth_b)
-                width_calc = width_a * (q_for_hydraulics**width_b)
+                depth_calc = control_a_d * (q_for_hydraulics**control_b_d)
+                width_calc = control_a_w * (q_for_hydraulics**control_b_w)
                 velocity_calc = q_for_hydraulics/(depth_calc*width_calc)
-                if (velocity_calc .lt. min_velocity) velocity_calc = min_velocity
+                if (velocity_calc .lt. control_min_velocity) velocity_calc = control_min_velocity
             else
                 depth_calc = 0.0d0
                 width_calc = 0.0d0
-                velocity_calc = min_velocity
+                velocity_calc = control_min_velocity
             end if
             q_out = ROUND1_DOUBLE(q_for_hydraulics)
             depth_out = ROUND1_DOUBLE(depth_calc)
             width_out = ROUND1_DOUBLE(width_calc)
             velocity_out = ROUND2_DOUBLE(velocity_calc)
         else
-            q_vector_cfs = real(q_cms) * legacy_cms_to_cfs
-            if (q_vector_cfs .lt. real(min_flow)) q_vector_cfs = real(min_flow)
-            depth_vector = a_z * (q_vector_cfs**b_z)
-            width_vector = a_w * (q_vector_cfs**b_w)
+            if (trim(control_flow_units) .eq. "cfs") then
+                q_vector_cfs = real(q_cms)
+            else
+                q_vector_cfs = real(q_cms) * vector_cms_to_cfs
+            end if
+            if (q_vector_cfs .lt. real(control_min_flow)) q_vector_cfs = real(control_min_flow)
+            depth_vector = real(control_a_d) * (q_vector_cfs**real(control_b_d))
+            width_vector = real(control_a_w) * (q_vector_cfs**real(control_b_w))
             velocity_vector = q_vector_cfs/(depth_vector*width_vector)
-            if (velocity_vector .lt. real(min_velocity)) velocity_vector = real(min_velocity)
+            if (velocity_vector .lt. real(control_min_velocity)) velocity_vector = real(control_min_velocity)
             q_out = ROUND1(q_vector_cfs)
             depth_out = ROUND1(depth_vector)
             width_out = ROUND1(width_vector)
@@ -1468,8 +1486,8 @@ contains
         real :: z_temp, w_temp
 
         if (Q_out(cell_index) .lt. min_flow) then
-            z_temp = a_z * (min_flow**b_z)
-            w_temp = a_w * (min_flow**b_w)
+            z_temp = real(control_a_d) * (min_flow**real(control_b_d))
+            w_temp = real(control_a_w) * (min_flow**real(control_b_w))
             u(cell_index) = min_flow/(z_temp*w_temp)
             depth(cell_index) = z_temp
             width(cell_index) = w_temp

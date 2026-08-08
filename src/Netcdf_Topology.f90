@@ -5,6 +5,7 @@ module Netcdf_Topology
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use Netcdf_Reservoir
     implicit none
 
 contains
@@ -116,20 +117,57 @@ contains
         integer :: nreservoir
 
         if (reservoir) then
-            read(37,*)
-            do nreservoir = 1, nres
-                read(37,*) dam_number(nreservoir), &
-                    dam_grid_lat(nreservoir), dam_grid_lon(nreservoir), &
-                    res_depth_meter(nreservoir), res_width_meter(nreservoir), &
-                    res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
-                    res_start_node(nreservoir), res_end_node(nreservoir)
+            if (LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+                call READ_RESERVOIR_NC_PARAMETERS()
+            else
+                read(37,*)
+                do nreservoir = 1, nres
+                    read(37,*) dam_number(nreservoir), &
+                        dam_grid_lat(nreservoir), dam_grid_lon(nreservoir), &
+                        res_depth_meter(nreservoir), res_width_meter(nreservoir), &
+                        res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
+                        res_start_node(nreservoir), res_end_node(nreservoir)
 
-                print *, dam_number(nreservoir), res_depth_meter(nreservoir), &
-                    res_width_meter(nreservoir), res_area_km2(nreservoir), &
-                    res_start_node(nreservoir), res_end_node(nreservoir)
-            end do
+                    print *, dam_number(nreservoir), res_depth_meter(nreservoir), &
+                        res_width_meter(nreservoir), res_area_km2(nreservoir), &
+                        res_start_node(nreservoir), res_end_node(nreservoir)
+                end do
+            end if
         end if
     end subroutine READ_RESERVOIR_PARAMETERS
+
+    subroutine VALIDATE_RESERVOIR_TOPOLOGY(topo_res_num)
+        integer, intent(in) :: topo_res_num(:)
+        integer :: cell, reservoir_index
+        logical, allocatable :: found(:)
+
+        if (.not. reservoir) return
+        allocate(found(nres))
+        found = .false.
+        do cell = 1, size(topo_res_num)
+            reservoir_index = topo_res_num(cell)
+            if (reservoir_index .lt. 0 .or. reservoir_index .gt. nres) then
+                write(*,*) "NetCDF topology error: res_num at cell ", cell, &
+                    " is outside 0..nres: ", reservoir_index
+                stop 1
+            end if
+            if (reservoir_index .gt. 0) found(reservoir_index) = .true.
+        end do
+        do reservoir_index = 1, nres
+            if (.not. found(reservoir_index)) then
+                write(*,*) "NetCDF topology error: reservoir ", reservoir_index, &
+                    " has no assigned topology cell."
+                stop 1
+            end if
+            if (topo_res_num(res_start_node(reservoir_index)) .ne. reservoir_index .or. &
+                topo_res_num(res_end_node(reservoir_index)) .ne. reservoir_index) then
+                write(*,*) "NetCDF topology error: start/end cells do not match reservoir ", &
+                    reservoir_index, "."
+                stop 1
+            end if
+        end do
+        deallocate(found)
+    end subroutine VALIDATE_RESERVOIR_TOPOLOGY
 
     subroutine READ_TOPOLOGY_NETCDF(spatial_file)
         character(len=*), intent(in) :: spatial_file
@@ -211,6 +249,7 @@ contains
         call NC_TOPO_CHECK(nf90_close(ncid), 'close topology file')
 
         call READ_RESERVOIR_PARAMETERS()
+        call VALIDATE_RESERVOIR_TOPOLOGY(topo_res_num)
 
         ncell = 0
         ns_max_test = -1
