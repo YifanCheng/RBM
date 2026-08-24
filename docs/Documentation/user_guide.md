@@ -88,7 +88,7 @@ A typical netCDF run uses:
 | Grid-to-HRU remap file | When meteorology IDs do not directly match topology HRUs | Sparse weights from source grid cells to topology HRUs |
 | Local runoff/baseflow netCDF | Optional | Supplies runoff and baseflow used to calculate nonzero `Q_local` |
 | Grid-cell area netCDF | Required with local runoff/baseflow | Converts runoff depth to local discharge |
-| `reservoir_data.nc` | Required when reservoirs are enabled | Reservoir parameters, storage, releases, and selective-withdrawal data |
+| `reservoir_data.nc` | Required when reservoirs are enabled | Reservoir parameters, daily storage, and selective-withdrawal fractions |
 
 ### Meteorological inputs
 

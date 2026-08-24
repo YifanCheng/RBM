@@ -163,9 +163,10 @@ Subroutine BEGIN(param_file,spatial_file)
                            res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
                            res_start_node(nreservoir), res_end_node(nreservoir)
 
-                print *, dam_number(nreservoir), res_depth_meter(nreservoir), &
-                         res_width_meter(nreservoir), res_area_km2(nreservoir), &
-                         res_start_node(nreservoir), res_end_node(nreservoir)
+                if (control_verbose) print *, dam_number(nreservoir), &
+                    res_depth_meter(nreservoir), res_width_meter(nreservoir), &
+                    res_area_km2(nreservoir), res_start_node(nreservoir), &
+                    res_end_node(nreservoir)
             end do
 #ifdef USE_NETCDF
         end if
@@ -247,7 +248,6 @@ Subroutine BEGIN(param_file,spatial_file)
             if (reservoir) then
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0,i6)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
-                !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
                 read(lat,*,iostat=ios) lat_id
                 if (ios .eq. 0) then
                     hru_id(ncell)=lat_id
@@ -260,7 +260,6 @@ Subroutine BEGIN(param_file,spatial_file)
             else
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
-                !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
                 read(lat,*,iostat=ios) lat_id
                 if (ios .eq. 0) then
                     hru_id(ncell)=lat_id
@@ -305,7 +304,6 @@ Subroutine BEGIN(param_file,spatial_file)
         end if
         nseg=nseg+1
         segment_cell(nr,nseg)=ncell
-        !write(*,*) 'nndlta -- ',nr,nndlta,nseg,ncell,segment_cell(nr,nseg)
         x_dist(nr,nseg)=x_dist(nr,nseg-1)-dx(ncell)
         !
         !   Write Segment List for mapping to temperature output (UW_JRY_2008/11/19)

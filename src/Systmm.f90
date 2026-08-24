@@ -389,8 +389,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                             ! Set initial river storage (Initial storage for first grid cell is 0)
                             !
                             do nm=no_dt(ns),1,-1
-                                if (ncell.eq.1827.and.nd.eq.197) write(88,*) &
-                                    nyear,nd,ns,nm
                                 dt_calc=dt_part(nm)
                                 z=depth(nncell)
                                 call energy(T_0,q_surf,nncell,z,nd)
@@ -414,8 +412,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                 !
                                 error_EE=deriv_2nd*dt_calc**2/2
                                 !
-                                !if (ncell.eq.4089 .and. nd.gt.220.and.nd.lt.230) write(*,*) &
-                                !     nyear,nd,ns,nm,wind(nncell),q_ns(nncell)+q_na(nncell),T_0,error_EE
                                 if(T_0.lt.0.0) T_0=0.0
                                 q_dot_pre = q_dot
                                 !
@@ -489,15 +485,10 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                         !   if the segment is located in reservoir
                         !
                         !   
-                        !   test output for a specific grid cell 
-                        !
-                        !
-                        if (ncell.eq.1827.and.nd.eq.197) write(*,*) nyear,nd,nr,ncell,ns,T_0
                         do nseg_temp=1,nseg_out_num
                             if (nseg_out(nr,ncell,nseg_temp).eq.ns) then
                                 call WRITE(time,nd,ndays,nr,ncell,ns,T_0,T_head(nr),dbt(ncell), &
                                     Q_inflow_out, Q_outflow_out)
-                            if (ncell.eq.1827) write(89,*)nyear,nd,nr,ncell,ns,T_0,temp_equil,time_equil,deriv_2nd*dt_comp**2/2
                             end if
                         end do
                         end if
@@ -505,7 +496,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                         if (res_pres(ncell)) then
                             !  res_no is the reservoir number
                             res_no = res_num(ncell)
-                            !write(*,*) res_no
                             !
                             !     If it is located in the first segment in the
                             !     river reach, initialization for calculation
@@ -712,8 +702,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                     write(75, '(i8, i6, 1680f20.10)') nyear, nd, T_epil(:), T_hypo(:), T_res_inflow(:),& 
                         depth_e(:), depth_h(:),&
                         Q_res_inflow(:), Q_res_outflow(:)
-                    write(76,'(i8, i6, 240f15.10, 240f15.10)') nyear, nd, depth_e(:), depth_h(:), volume_e_x,volume_h_x
-                    write(77,*) nyear, nd, diffusion_tot, advec_hyp_tot,advec_epi_tot,qsurf_tot
                 end if
             end do
         !

@@ -88,14 +88,10 @@ SUBROUTINE Read_Forcing
             Q_avg=0.5*(Q_in(no_heat)+Q_out(no_heat))
             dt(no_heat)=dx(no_heat)/u(no_heat)
             !
-            !  Added check to see if travel time of parcel exceeds the
-            !  computational interval.  If so, it writes to file fort.45.
-            !  One should check to see if there are NaN's at that node.
-            !  (UW_JRY_2011/03/15)
-            !
-            if(dt(no_heat).gt.dt_comp) write(45,*) &
-                'Travel time=',dt(no_heat) &
-                , '> dt_comp at node -',no_heat
+            ! Warn when parcel travel time exceeds the computational interval.
+            if (dt(no_heat) .gt. dt_comp) write(*,*) &
+                'RBM warning: travel time=',dt(no_heat), &
+                ' exceeds dt_comp at node ',no_heat
         end do
         !
         ! Tributary flow is Q_out from the next to the last cell

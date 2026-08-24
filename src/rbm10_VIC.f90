@@ -117,10 +117,15 @@ PROGRAM RBM10_VIC
     else
         write(*,*) 'Network file    : ',net_file
     end if
-    write(*,*) 'Parameter file  : ',param_file!
-    write(*,*) 'Temperature file: ',temp_file
-    write(*,*) 'Spatial file: ',spatial_file
-    write(*,*) 'Reservoir file:   ',res_file
+    if (.not. control_file_mode) write(*,*) 'Parameter file  : ',param_file
+    if (control_write_ascii) then
+        write(*,*) 'Temperature file: ',temp_file
+        write(*,*) 'Spatial file    : ',spatial_file
+    end if
+    if (control_write_netcdf) write(*,*) 'NetCDF output   : ',TRIM(temp_file)// '.nc'
+    if (.not. control_file_mode .or. control_reservoir) then
+        write(*,*) 'Reservoir file  : ',res_file
+    end if
     !
     if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) then
         OPEN(UNIT=90,FILE=TRIM(net_file),STATUS='OLD')

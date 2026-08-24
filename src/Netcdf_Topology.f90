@@ -128,9 +128,10 @@ contains
                         res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
                         res_start_node(nreservoir), res_end_node(nreservoir)
 
-                    print *, dam_number(nreservoir), res_depth_meter(nreservoir), &
-                        res_width_meter(nreservoir), res_area_km2(nreservoir), &
-                        res_start_node(nreservoir), res_end_node(nreservoir)
+                    if (control_verbose) print *, dam_number(nreservoir), &
+                        res_depth_meter(nreservoir), res_width_meter(nreservoir), &
+                        res_area_km2(nreservoir), res_start_node(nreservoir), &
+                        res_end_node(nreservoir)
                 end do
             end if
         end if

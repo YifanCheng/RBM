@@ -564,7 +564,7 @@ contains
             write(*,*) "  Heat schema      : gridded (time/lat/lon)"
         else
             write(*,*) "  Heat id variable : ", trim(control_heat_id_var)
-            write(*,*) "  Heat mapping     : positional preprocessing-compatible order"
+            write(*,*) "  Heat mapping     : positional routed-flow order"
         end if
         if (raw_heat_schema) then
             write(*,*) "  Heat variables   : raw CLM TSA/RH2M/FSDS/FLDS/PBOT/U10"
@@ -1154,8 +1154,9 @@ contains
                 if (wind(no_heat) .lt. 1.0) wind(no_heat) = 1.0
                 delta_n = ndelta(ncell)
                 dt(no_heat) = dx(no_heat)/u(no_heat)
-                if (dt(no_heat) .gt. dt_comp) write(45,*) &
-                    'Travel time=',dt(no_heat), '> dt_comp at node -',no_heat
+                if (dt(no_heat) .gt. dt_comp) write(*,*) &
+                    'RBM warning: travel time=',dt(no_heat), &
+                    ' exceeds dt_comp at node ',no_heat
             end do
 
             no_heat = no_heat + 1
