@@ -28,6 +28,7 @@ SUBROUTINE reservoir_subroutine(res_no,q_surf)
     if (K_z(res_no) > 2) K_z(res_no) = 2
     ! ONLY for no stratification run:
     !K_z(res_no) =  1
+    write(57, *) res_no,K_z(res_no)
 
 
 

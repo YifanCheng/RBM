@@ -22,6 +22,9 @@ SUBROUTINE Error_estimate(nd,res_no,q_surf)
     end if
     log_K_z = log10(n_stability) * (-1)  - 5.699 ! high scenario - 2  w/
     K_z(res_no) = 10**log_K_z
+    ! ONLY for no stratification run:
+    write(57, *) res_no,K_z(res_no)
+    !
     !     Estimate the numerical error in reservoir temperature 
     !
     !if (temp_epi_pre-temp_hyp_pre.ge.0) then

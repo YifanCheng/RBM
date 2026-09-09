@@ -1,7 +1,7 @@
 site_name: RBM
 site_description: River Basin Model
 site_author: UW Hydro | Computational Hydrology
-repo_url: https://github.com/YifanCheng/RBM/tree/develop
+repo_url: https://github.com/YifanCheng/RBM/tree/RBM_res_develop_selective_withdraw/docs/Documentation
 site_url: http://rbm_yifan.readthedocs.org/
 theme: readthedocs
 docs_dir: docs
