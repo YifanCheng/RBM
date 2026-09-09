@@ -16,7 +16,8 @@ The ASCII workflow and two-argument command remain supported.
 3. Check the required [netCDF topology](Documentation/netcdf_topology.md),
    [grid-to-HRU remapping](Documentation/grid_to_hru_remap.md), and
    [reservoir](Documentation/netcdf_reservoir.md) schemas that apply to the run.
-4. Interpret generated files with the [Output-File Reference](Documentation/output_files.md).
+4. Continue forecasts or long simulations with [restart files](Documentation/restart_files.md).
+5. Interpret generated files with the [Output-File Reference](Documentation/output_files.md).
 
 ## Workflows
 

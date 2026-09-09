@@ -21,7 +21,7 @@ objects_nc = rbm10_VIC_nc.o Begin_nc.o Systmm_nc.o Particle_Track.o \
           Error_estimate.o \
           reservoir_subroutine_implicit.o \
           Water_Balance.o Write_nc.o Netcdf_Output.o Netcdf_Input.o \
-          Netcdf_Topology.o Netcdf_Reservoir.o
+          Netcdf_Topology.o Netcdf_Reservoir.o Netcdf_Restart.o
 f90comp = gfortran # -O0 -g #-O2
 NC_FFLAGS = $(shell nf-config --fflags 2>/dev/null)
 NC_LIBS = $(shell nf-config --flibs 2>/dev/null) $(shell nc-config --libs 2>/dev/null)
@@ -43,6 +43,7 @@ test:
 test_netcdf: rbm10_VIC_nc
 	cd .. && examples/netcdf_grid_remap/run_and_validate.sh
 	cd .. && examples/netcdf_reservoir/run_and_validate.sh
+	cd .. && examples/netcdf_reservoir/run_restart_and_validate.sh
 
 Block_Energy.o: Block_Energy.f90
 	$(f90comp) -c Block_Energy.f90
@@ -79,7 +80,7 @@ Read_Forcing_nc.o: block_energy.mod block_hydro.mod block_network.mod block_rese
 	$(f90comp) -cpp -DUSE_NETCDF $(NC_FFLAGS) -c Read_Forcing.f90 -o Read_Forcing_nc.o
 Systmm.o: block_network.mod block_energy.mod block_hydro.mod block_reservoir.mod block_control.mod Systmm.f90
 	$(f90comp) -cpp -c Systmm.f90
-Systmm_nc.o: block_network.mod block_energy.mod block_hydro.mod block_reservoir.mod block_control.mod netcdf_output.mod netcdf_input.mod netcdf_reservoir.mod Systmm.f90
+Systmm_nc.o: block_network.mod block_energy.mod block_hydro.mod block_reservoir.mod block_control.mod netcdf_output.mod netcdf_input.mod netcdf_reservoir.mod netcdf_restart.mod Systmm.f90
 	$(f90comp) -cpp -DUSE_NETCDF $(NC_FFLAGS) -c Systmm.f90 -o Systmm_nc.o
 Energy.o: block_energy.mod Energy.f90
 	$(f90comp) -c Energy.f90
@@ -103,6 +104,9 @@ Network_To_Netcdf_Topology.o: Network_To_Netcdf_Topology.f90
 Netcdf_Reservoir.o: block_control.mod block_network.mod block_reservoir.mod Netcdf_Reservoir.f90
 	$(f90comp) $(NC_FFLAGS) -c Netcdf_Reservoir.f90
 netcdf_reservoir.mod: Netcdf_Reservoir.o
+Netcdf_Restart.o: block_control.mod block_energy.mod block_hydro.mod block_network.mod block_reservoir.mod netcdf_input.mod netcdf_output.mod Netcdf_Restart.f90
+	$(f90comp) $(NC_FFLAGS) -c Netcdf_Restart.f90
+netcdf_restart.mod: Netcdf_Restart.o
 Reservoir_To_Netcdf.o: Reservoir_To_Netcdf.f90
 	$(f90comp) $(NC_FFLAGS) -c Reservoir_To_Netcdf.f90
 density_subroutine.o: data_type.mod density_subroutine.f90
@@ -130,6 +134,6 @@ clean:
            block_control.mod data_type.mod \
            rbm10_VIC
 	rm -f $(objects)
-	rm -f rbm10_VIC_nc rbm10_VIC_nc.o Begin_nc.o Systmm_nc.o Write_nc.o Read_Forcing_nc.o Netcdf_Output.o Netcdf_Input.o Netcdf_Topology.o Netcdf_Reservoir.o netcdf_output.mod netcdf_input.mod netcdf_topology.mod netcdf_reservoir.mod
+	rm -f rbm10_VIC_nc rbm10_VIC_nc.o Begin_nc.o Systmm_nc.o Write_nc.o Read_Forcing_nc.o Netcdf_Output.o Netcdf_Input.o Netcdf_Topology.o Netcdf_Reservoir.o Netcdf_Restart.o netcdf_output.mod netcdf_input.mod netcdf_topology.mod netcdf_reservoir.mod netcdf_restart.mod
 	rm -f network_to_netcdf_topology Network_To_Netcdf_Topology.o
 	rm -f reservoir_to_netcdf Reservoir_To_Netcdf.o

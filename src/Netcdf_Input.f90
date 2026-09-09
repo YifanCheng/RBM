@@ -72,6 +72,15 @@ module Netcdf_Input
     integer :: local_start_index = 1
     character(len=32) :: flow_time_calendar = "standard", heat_time_calendar = "standard"
     character(len=32) :: local_time_calendar = "standard"
+    logical :: restart_position_enabled = .false.
+    logical :: restart_local_flow_enabled = .false.
+    integer :: restart_flow_next_day = 0
+    integer :: restart_heat_next_day = 0
+    integer :: restart_local_next_day = 0
+    character(len=32) :: restart_flow_calendar = "standard"
+    character(len=32) :: restart_heat_calendar = "standard"
+    character(len=32) :: restart_local_calendar = "standard"
+
 
 contains
 
@@ -340,6 +349,11 @@ contains
         integer :: var_ndims, var_dimids(nf90_max_var_dims), ntime, cell
 
         local_flow_enabled = (len_trim(control_local_flow_file) .gt. 0)
+        if (restart_position_enabled .and. &
+            local_flow_enabled .neqv. restart_local_flow_enabled) then
+            write(*,*) "NetCDF input error: local-flow configuration does not match restart file."
+            stop 1
+        end if
         if (.not. local_flow_enabled) return
 
         call NC_INPUT_CHECK(nf90_open(trim(control_local_flow_file), nf90_nowrite, local_flow_ncid), &
@@ -379,8 +393,16 @@ contains
 
         call INIT_TIME_AXIS(local_flow_ncid, "local flow", local_time_days, local_time_origin_year, &
             local_time_origin_month, local_time_origin_day, local_time_calendar)
-        local_start_index = FIND_TIME_INDEX(local_time_days, local_time_origin_year, &
-            local_time_origin_month, local_time_origin_day, local_time_calendar, sy, sm, sd, "local flow")
+        if (restart_position_enabled) then
+            call CHECK_RESTART_CALENDAR("local flow", restart_local_calendar, local_time_calendar)
+            local_start_index = FIND_TIME_SERIAL_INDEX(local_time_days, local_time_origin_year, &
+                local_time_origin_month, local_time_origin_day, local_time_calendar, &
+                restart_local_next_day, "local flow")
+        else
+            local_start_index = FIND_TIME_INDEX(local_time_days, local_time_origin_year, &
+                local_time_origin_month, local_time_origin_day, local_time_calendar, &
+                sy, sm, sd, "local flow")
+        end if
         call NC_INPUT_CHECK(nf90_inquire_variable(local_flow_ncid, local_runoff_varid, &
             ndims=var_ndims, dimids=var_dimids), "inquire local runoff dimensions")
         call NC_INPUT_CHECK(nf90_inquire_dimension(local_flow_ncid, var_dimids(var_ndims), len=ntime), &
@@ -402,6 +424,10 @@ contains
         integer, external :: Julian
 
         if (nc_forcing_open) return
+
+        restart_position_enabled = .false.
+        if (LEN_TRIM(control_restart_input_file) .gt. 0) &
+            call LOAD_RESTART_FORCING_POSITION(TRIM(control_restart_input_file))
 
         call NC_INPUT_CHECK(nf90_open(trim(control_flow_file), nf90_nowrite, flow_ncid), "open flow file")
         call NC_INPUT_CHECK(nf90_open(trim(control_heat_file), nf90_nowrite, heat_ncid), "open heat file")
@@ -512,10 +538,23 @@ contains
             flow_time_origin_month, flow_time_origin_day, flow_time_calendar)
         call INIT_TIME_AXIS(heat_ncid, "heat", heat_time_days, heat_time_origin_year, &
             heat_time_origin_month, heat_time_origin_day, heat_time_calendar)
-        flow_start_index = FIND_TIME_INDEX(flow_time_days, flow_time_origin_year, &
-            flow_time_origin_month, flow_time_origin_day, flow_time_calendar, sy, sm, sd, "flow")
-        heat_start_index = FIND_TIME_INDEX(heat_time_days, heat_time_origin_year, &
-            heat_time_origin_month, heat_time_origin_day, heat_time_calendar, sy, sm, sd, "heat")
+        if (restart_position_enabled) then
+            call CHECK_RESTART_CALENDAR("flow", restart_flow_calendar, flow_time_calendar)
+            call CHECK_RESTART_CALENDAR("heat", restart_heat_calendar, heat_time_calendar)
+            flow_start_index = FIND_TIME_SERIAL_INDEX(flow_time_days, flow_time_origin_year, &
+                flow_time_origin_month, flow_time_origin_day, flow_time_calendar, &
+                restart_flow_next_day, "flow")
+            heat_start_index = FIND_TIME_SERIAL_INDEX(heat_time_days, heat_time_origin_year, &
+                heat_time_origin_month, heat_time_origin_day, heat_time_calendar, &
+                restart_heat_next_day, "heat")
+        else
+            flow_start_index = FIND_TIME_INDEX(flow_time_days, flow_time_origin_year, &
+                flow_time_origin_month, flow_time_origin_day, flow_time_calendar, &
+                sy, sm, sd, "flow")
+            heat_start_index = FIND_TIME_INDEX(heat_time_days, heat_time_origin_year, &
+                heat_time_origin_month, heat_time_origin_day, heat_time_calendar, &
+                sy, sm, sd, "heat")
+        end if
         call INIT_LOCAL_FLOW(sy, sm, sd, ndays_needed)
 
         call NC_INPUT_CHECK(nf90_inquire_variable(flow_ncid, flow_varid, ndims=var_ndims, &
@@ -607,6 +646,168 @@ contains
 
         nc_forcing_open = .true.
     end subroutine NC_INPUT_INIT
+
+    subroutine LOAD_RESTART_FORCING_POSITION(path)
+        character(len=*), intent(in) :: path
+        integer :: ncid, input_netcdf, local_enabled
+        integer :: file_year, file_month, file_day, sy, sm, sd
+        integer, external :: Julian
+
+        call NC_INPUT_CHECK(nf90_open(trim(path), nf90_nowrite, ncid), &
+            "open restart forcing metadata")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "state_year", &
+            file_year), "read restart state_year")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "state_month", &
+            file_month), "read restart state_month")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "state_day", &
+            file_day), "read restart state_day")
+        read(control_start_date,"(i4,2i2)") sy, sm, sd
+        if (Julian(sy,sm,sd) - Julian(file_year,file_month,file_day) .ne. 1) then
+            write(*,"(A,I4.4,2I2.2,A,I4.4,2I2.2,A)") &
+                "NetCDF restart error: state date ", file_year, file_month, &
+                file_day, " must immediately precede start_date ", sy, sm, sd, "."
+            stop 1
+        end if
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "input_netcdf", &
+            input_netcdf), "read restart input_netcdf")
+        if (input_netcdf .ne. 1) then
+            write(*,*) "NetCDF input error: restart input format does not match current input_format."
+            stop 1
+        end if
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "flow_next_day", &
+            restart_flow_next_day), "read restart flow_next_day")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "heat_next_day", &
+            restart_heat_next_day), "read restart heat_next_day")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "local_flow_enabled", &
+            local_enabled), "read restart local_flow_enabled")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "local_next_day", &
+            restart_local_next_day), "read restart local_next_day")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "flow_calendar", &
+            restart_flow_calendar), "read restart flow_calendar")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "heat_calendar", &
+            restart_heat_calendar), "read restart heat_calendar")
+        call NC_INPUT_CHECK(nf90_get_att(ncid, nf90_global, "local_calendar", &
+            restart_local_calendar), "read restart local_calendar")
+        call NC_INPUT_CHECK(nf90_close(ncid), "close restart forcing metadata")
+
+        if (local_enabled .ne. 0 .and. local_enabled .ne. 1) then
+            write(*,*) "NetCDF input error: invalid local_flow_enabled in restart file."
+            stop 1
+        end if
+        restart_local_flow_enabled = local_enabled .eq. 1
+        restart_position_enabled = .true.
+    end subroutine LOAD_RESTART_FORCING_POSITION
+
+    subroutine GET_NEXT_FORCING_POSITION(run_days, flow_next_day, heat_next_day, &
+        local_enabled, local_next_day, flow_calendar, heat_calendar, local_calendar)
+        integer, intent(in) :: run_days
+        integer, intent(out) :: flow_next_day, heat_next_day, local_next_day
+        logical, intent(out) :: local_enabled
+        character(len=*), intent(out) :: flow_calendar, heat_calendar, local_calendar
+
+        if (.not. nc_forcing_open) then
+            write(*,*) "NetCDF input error: cannot save forcing position before input initialization."
+            stop 1
+        end if
+        flow_next_day = NEXT_TIME_SERIAL(flow_time_days, flow_time_origin_year, &
+            flow_time_origin_month, flow_time_origin_day, flow_time_calendar, &
+            flow_start_index, run_days, "flow")
+        heat_next_day = NEXT_TIME_SERIAL(heat_time_days, heat_time_origin_year, &
+            heat_time_origin_month, heat_time_origin_day, heat_time_calendar, &
+            heat_start_index, run_days, "heat")
+        local_enabled = local_flow_enabled
+        local_next_day = 0
+        local_calendar = "standard"
+        if (local_enabled) then
+            local_next_day = NEXT_TIME_SERIAL(local_time_days, local_time_origin_year, &
+                local_time_origin_month, local_time_origin_day, local_time_calendar, &
+                local_start_index, run_days, "local flow")
+            local_calendar = local_time_calendar
+        end if
+        flow_calendar = flow_time_calendar
+        heat_calendar = heat_time_calendar
+    end subroutine GET_NEXT_FORCING_POSITION
+
+    integer function NEXT_TIME_SERIAL(axis_days, origin_year, origin_month, &
+        origin_day, calendar, start_index, run_days, label)
+        integer, intent(in) :: axis_days(:)
+        integer, intent(in) :: origin_year, origin_month, origin_day
+        integer, intent(in) :: start_index, run_days
+        character(len=*), intent(in) :: calendar, label
+        integer :: next_index, next_offset
+
+        next_index = start_index + run_days
+        if (next_index .ge. 1 .and. next_index .le. size(axis_days)) then
+            next_offset = axis_days(next_index)
+        else if (next_index .eq. size(axis_days) + 1) then
+            next_offset = axis_days(size(axis_days)) + 1
+        else
+            write(*,*) "NetCDF input error: invalid next ", trim(label), &
+                " forcing position while writing restart file."
+            stop 1
+        end if
+        NEXT_TIME_SERIAL = CALENDAR_DATE_SERIAL(origin_year, origin_month, &
+            origin_day, calendar) + next_offset
+    end function NEXT_TIME_SERIAL
+
+    integer function FIND_TIME_SERIAL_INDEX(axis_days, origin_year, origin_month, &
+        origin_day, calendar, target_serial, label)
+        integer, intent(in) :: axis_days(:)
+        integer, intent(in) :: origin_year, origin_month, origin_day, target_serial
+        character(len=*), intent(in) :: calendar, label
+        integer :: target_day, low, high, middle
+
+        target_day = target_serial - CALENDAR_DATE_SERIAL(origin_year, origin_month, &
+            origin_day, calendar)
+        low = 1
+        high = size(axis_days)
+        do while (low .le. high)
+            middle = (low + high)/2
+            if (axis_days(middle) .eq. target_day) then
+                FIND_TIME_SERIAL_INDEX = middle
+                return
+            else if (axis_days(middle) .lt. target_day) then
+                low = middle + 1
+            else
+                high = middle - 1
+            end if
+        end do
+        write(*,*) "NetCDF input error: current ", trim(label), &
+            " file does not contain the next forcing record saved in the restart file."
+        stop 1
+    end function FIND_TIME_SERIAL_INDEX
+
+    integer function CALENDAR_DATE_SERIAL(year, month, day, calendar)
+        integer, intent(in) :: year, month, day
+        character(len=*), intent(in) :: calendar
+        integer, parameter :: month_start(12) = &
+            (/0,31,59,90,120,151,181,212,243,273,304,334/)
+        integer, external :: Julian
+
+        if (CALENDAR_IS_NOLEAP(calendar)) then
+            CALENDAR_DATE_SERIAL = 365*year + month_start(month) + day - 1
+        else
+            CALENDAR_DATE_SERIAL = Julian(year,month,day)
+        end if
+    end function CALENDAR_DATE_SERIAL
+
+    logical function CALENDAR_IS_NOLEAP(calendar)
+        character(len=*), intent(in) :: calendar
+
+        CALENDAR_IS_NOLEAP = trim(calendar) .eq. "noleap" .or. &
+            trim(calendar) .eq. "365_day"
+    end function CALENDAR_IS_NOLEAP
+
+    subroutine CHECK_RESTART_CALENDAR(label, saved_calendar, current_calendar)
+        character(len=*), intent(in) :: label, saved_calendar, current_calendar
+
+        if (CALENDAR_IS_NOLEAP(saved_calendar) .neqv. &
+            CALENDAR_IS_NOLEAP(current_calendar)) then
+            write(*,*) "NetCDF input error: ", trim(label), &
+                " calendar does not match restart file."
+            stop 1
+        end if
+    end subroutine CHECK_RESTART_CALENDAR
 
     subroutine INIT_TIME_AXIS(ncid, label, axis_days, origin_year, origin_month, origin_day, calendar)
         integer, intent(in) :: ncid
@@ -1585,6 +1786,11 @@ contains
         cached_heat_day = -1
         cached_local_day = -1
         local_flow_enabled = .false.
+        restart_position_enabled = .false.
+        restart_local_flow_enabled = .false.
+        restart_flow_next_day = 0
+        restart_heat_next_day = 0
+        restart_local_next_day = 0
         nc_forcing_open = .false.
     end subroutine NC_INPUT_CLOSE
 

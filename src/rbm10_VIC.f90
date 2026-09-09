@@ -86,6 +86,12 @@ PROGRAM RBM10_VIC
             write(*,*) "Build and run rbm10_VIC_nc, or set <output_format> ascii."
             stop 1
         end if
+        if (LEN_TRIM(control_restart_input_file) .gt. 0 .or. &
+            LEN_TRIM(control_restart_output_file) .gt. 0) then
+            write(*,*) "Restart files require the netCDF-enabled executable."
+            write(*,*) "Build and run rbm10_VIC_nc, or remove the restart controls."
+            stop 1
+        end if
 #endif
         if (LEN_TRIM(control_topology_file) .gt. 0) then
 #ifdef USE_NETCDF

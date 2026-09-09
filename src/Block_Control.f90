@@ -16,6 +16,8 @@ Module Block_Control
     character(len=200) :: control_reservoir_file = ""
     character(len=200) :: control_reservoir_storage_file = ""
     character(len=200) :: control_reservoir_sel_withdraw_file = ""
+    character(len=200) :: control_restart_input_file = ""
+    character(len=200) :: control_restart_output_file = ""
     character(len=200) :: control_output_prefix = ""
     character(len=8) :: control_start_date = ""
     character(len=8) :: control_end_date = ""

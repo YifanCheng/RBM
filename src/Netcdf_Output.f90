@@ -1,6 +1,7 @@
 module Netcdf_Output
     use netcdf
     use Block_Network
+    use Block_Control, only: control_restart_input_file
     use, intrinsic :: ieee_arithmetic
     implicit none
 
@@ -19,6 +20,10 @@ module Netcdf_Output
     integer :: n_hru_out = 0
     integer :: current_day = 0
     logical :: output_uses_noleap = .false.
+    logical :: output_position_initialized = .false.
+    integer :: output_origin_year = 0
+    integer :: output_origin_month = 0
+    integer :: output_origin_day = 0
     integer, allocatable :: hru_values(:)
     integer, allocatable :: hru_index_by_cell(:,:)
     logical, allocatable :: write_cell_segment(:,:)
@@ -39,12 +44,64 @@ contains
         end if
     end subroutine NC_CHECK
 
+    subroutine NC_OUTPUT_POSITION_INIT(use_noleap)
+        logical, intent(in) :: use_noleap
+        integer :: restart_ncid
+
+        if (output_position_initialized) then
+            if (output_uses_noleap .neqv. use_noleap) then
+                write(*,*) "NetCDF output error: output calendar changed during the run."
+                stop 1
+            end if
+            return
+        end if
+
+        output_uses_noleap = use_noleap
+        output_origin_year = start_year
+        output_origin_month = start_month
+        output_origin_day = start_day
+        if (LEN_TRIM(control_restart_input_file) .gt. 0) then
+            call NC_CHECK(nf90_open(TRIM(control_restart_input_file), nf90_nowrite, &
+                restart_ncid), "open restart output metadata")
+            call NC_CHECK(nf90_get_att(restart_ncid, nf90_global, &
+                "output_next_year", output_origin_year), &
+                "read restart output_next_year")
+            call NC_CHECK(nf90_get_att(restart_ncid, nf90_global, &
+                "output_next_month", output_origin_month), &
+                "read restart output_next_month")
+            call NC_CHECK(nf90_get_att(restart_ncid, nf90_global, &
+                "output_next_day", output_origin_day), &
+                "read restart output_next_day")
+            call NC_CHECK(nf90_close(restart_ncid), &
+                "close restart output metadata")
+        end if
+        if (.not. VALID_OUTPUT_DATE(output_origin_year,output_origin_month, &
+            output_origin_day)) then
+            write(*,*) "NetCDF output error: invalid output position in restart file."
+            stop 1
+        end if
+        output_position_initialized = .true.
+    end subroutine NC_OUTPUT_POSITION_INIT
+
+    logical function VALID_OUTPUT_DATE(year,month,day)
+        integer, intent(in) :: year, month, day
+        integer, dimension(12) :: days_in_month
+
+        VALID_OUTPUT_DATE = .false.
+        if (month .lt. 1 .or. month .gt. 12) return
+        days_in_month = (/31,28,31,30,31,30,31,31,30,31,30,31/)
+        if (mod(year,400) .eq. 0 .or. &
+            (mod(year,4) .eq. 0 .and. mod(year,100) .ne. 0)) &
+            days_in_month(2) = 29
+        VALID_OUTPUT_DATE = day .ge. 1 .and. day .le. days_in_month(month)
+    end function VALID_OUTPUT_DATE
+
     subroutine NC_OUTPUT_INIT(output_file,use_noleap)
         character(len=*), intent(in) :: output_file
         logical, intent(in) :: use_noleap
         real(8) :: fill_value
 
-        output_uses_noleap = use_noleap
+        call NC_OUTPUT_POSITION_INIT(use_noleap)
         call BUILD_OUTPUT_MAP()
         n_time_out = OUTPUT_DAY_COUNT()
         n_seg_out = nseg_out_num
@@ -292,10 +349,11 @@ contains
         allocate(hru_coord(n_hru_out))
 
         if (output_uses_noleap) then
-            output_year = start_year
-            output_month = start_month
-            output_day = start_day
-            start_julian = Julian(start_year,start_month,start_day)
+            output_year = output_origin_year
+            output_month = output_origin_month
+            output_day = output_origin_day
+            start_julian = Julian(output_origin_year,output_origin_month, &
+                output_origin_day)
             do i = 1,n_time_out
                 time_values(i) = Julian(output_year,output_month,output_day) - start_julian
                 call ADVANCE_NOLEAP_DATE(output_year,output_month,output_day)
@@ -335,6 +393,46 @@ contains
         end if
     end subroutine ADVANCE_NOLEAP_DATE
 
+    subroutine GET_NEXT_OUTPUT_POSITION(run_days, year, month, day)
+        integer, intent(in) :: run_days
+        integer, intent(out) :: year, month, day
+        integer :: i
+
+        if (.not. output_position_initialized) then
+            write(*,*) "NetCDF output error: output position was not initialized."
+            stop 1
+        end if
+        year = output_origin_year
+        month = output_origin_month
+        day = output_origin_day
+        do i = 1, run_days
+            if (output_uses_noleap) then
+                call ADVANCE_NOLEAP_DATE(year,month,day)
+            else
+                call ADVANCE_GREGORIAN_DATE(year,month,day)
+            end if
+        end do
+    end subroutine GET_NEXT_OUTPUT_POSITION
+
+    subroutine ADVANCE_GREGORIAN_DATE(year,month,day)
+        integer, intent(inout) :: year, month, day
+        integer, dimension(12) :: days_in_month
+
+        days_in_month = (/31,28,31,30,31,30,31,31,30,31,30,31/)
+        if (mod(year,400) .eq. 0 .or. &
+            (mod(year,4) .eq. 0 .and. mod(year,100) .ne. 0)) &
+            days_in_month(2) = 29
+        day = day + 1
+        if (day .gt. days_in_month(month)) then
+            day = 1
+            month = month + 1
+            if (month .gt. 12) then
+                month = 1
+                year = year + 1
+            end if
+        end if
+    end subroutine ADVANCE_GREGORIAN_DATE
+
     real(8) function ROUND2(value)
         real, intent(in) :: value
         character(len=32) :: text
@@ -343,8 +441,9 @@ contains
     end function ROUND2
 
     character(len=64) function TIME_UNITS()
-        write(TIME_UNITS,'(A,I4.4,A,I2.2,A,I2.2,A)') 'days since ',start_year,'-',start_month,'-',start_day, &
-            ' 00:00:00'
+        write(TIME_UNITS,'(A,I4.4,A,I2.2,A,I2.2,A)') 'days since ', &
+            output_origin_year,'-',output_origin_month,'-', &
+            output_origin_day,' 00:00:00'
     end function TIME_UNITS
 
 end module Netcdf_Output

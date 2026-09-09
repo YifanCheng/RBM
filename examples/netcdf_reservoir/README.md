@@ -26,6 +26,20 @@ examples/netcdf_reservoir/run_and_validate.sh
 The script runs RBM and compares `.Temp`, `.Spat`, `.Temp.nc`, and `.Resv`
 byte-for-byte with the packaged expected outputs.
 
+## Restart Validation
+
+The same fixture includes a continuous run and a pair of one-day runs linked
+by a restart file:
+
+```sh
+examples/netcdf_reservoir/run_restart_and_validate.sh
+```
+
+The script verifies that concatenated `.Temp` and `.Resv` outputs, both
+`.Spat` files, and the final serialized model state are byte-identical to the
+continuous run. The controls are `restart_full.control`,
+`restart_part1.control`, and `restart_part2.control`.
+
 ## Inputs
 
 | File | Purpose |

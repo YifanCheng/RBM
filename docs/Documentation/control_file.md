@@ -39,6 +39,8 @@ Each setting uses:
 | `input_format` | No | `ascii` | `ascii` or `netcdf` |
 | `output_format` | No | same as `input_format` | `ascii`, `netcdf`, or `both` |
 | `verbose` | No | `True` | Enables initialization and input diagnostics |
+| `restart_input_file` | No | omitted | Model state from the immediately preceding chunk; requires `rbm10_VIC_nc` |
+| `restart_output_file` | No | omitted | Writes model state after `end_date`; requires `rbm10_VIC_nc` |
 
 Provide exactly one of `topology_file` and `network_file`. A raw flow-direction grid is not a substitute for the completed topology file. See [netCDF topology](netcdf_topology.md).
 
@@ -92,6 +94,15 @@ ASCII alternative:
 | `reservoir_sel_withdraw_file` | ASCII daily selective-withdrawal fractions |
 
 When `reservoir=True`, provide either `reservoir_data_file` or all three ASCII files, never both. See [netCDF reservoir input](netcdf_reservoir.md).
+
+## Restart Files
+
+Use `restart_output_file` to save state after a successful chunk and
+`restart_input_file` in the next chunk. The saved state date must immediately
+precede the next `start_date`. RBM validates the calendar, topology, model
+configuration, and reservoir metadata before restoring state. See
+[restart files](restart_files.md) for chunking requirements and the included
+continuous-versus-split validation example.
 
 ## Flow Variables and Hydraulics
 
@@ -236,6 +247,7 @@ RBM stops before simulation when:
 - a date is invalid or the end precedes the start;
 - only one local-flow input is supplied;
 - reservoir options or file combinations conflict; or
-- hydraulic coefficients and limits are invalid.
+- hydraulic coefficients and limits are invalid; or
+- a restart date, calendar, topology, or model configuration is incompatible.
 
 File-specific netCDF validation additionally checks required variables, dimensions, IDs, units, time coverage, missing values, remap indices and weights, and reservoir consistency.

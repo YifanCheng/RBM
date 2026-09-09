@@ -14,7 +14,8 @@ For a netCDF run, RBM:
 4. optionally remaps gridded meteorology and local runoff/baseflow to RBM HRUs;
 5. computes hydraulic and energy inputs using the configured variables and coefficients;
 6. simulates stream temperature, including reservoirs when configured; and
-7. writes ASCII output, netCDF output, or both.
+7. writes ASCII output, netCDF output, or both; and
+8. optionally saves restart state for a later forecast or run chunk.
 
 RBM does **not** construct a complete river topology from a raw flow-direction grid. The user must provide a completed topology containing connectivity, river lengths, model parameters, cell/HRU identifiers, and reservoir locations when applicable. See [netCDF topology](netcdf_topology.md).
 
@@ -25,6 +26,7 @@ RBM does **not** construct a complete river topology from a raw flow-direction g
 | netCDF | `rbm10_VIC_nc` | control, topology, flow, meteorology | ASCII, netCDF, both |
 | netCDF with grid remapping | `rbm10_VIC_nc` | above plus remap weights; optional runoff/baseflow and area | ASCII, netCDF, both |
 | netCDF with reservoirs | `rbm10_VIC_nc` | above plus `reservoir_data.nc` | ASCII, netCDF, both |
+| Restarted or chunked | `rbm10_VIC_nc` | normal inputs plus an optional restart state | ASCII, netCDF, both |
 | ASCII control-file | `rbm10_VIC` or `rbm10_VIC_nc` | control, Network, flow, energy | ASCII; netCDF with netCDF binary |
 | Two-argument ASCII | `rbm10_VIC` | input prefix and output prefix | ASCII |
 
@@ -89,6 +91,7 @@ A typical netCDF run uses:
 | Local runoff/baseflow netCDF | Optional | Supplies runoff and baseflow used to calculate nonzero `Q_local` |
 | Grid-cell area netCDF | Required with local runoff/baseflow | Converts runoff depth to local discharge |
 | `reservoir_data.nc` | Required when reservoirs are enabled | Reservoir parameters, daily storage, and selective-withdrawal fractions |
+| Restart netCDF | Optional after the first chunk | Continues river and reservoir state from the immediately preceding date |
 
 ### Meteorological inputs
 
@@ -149,6 +152,8 @@ Complete examples are included in the repository:
 
 - `examples/netcdf_grid_remap/example.control`
 - `examples/netcdf_reservoir/example.control`
+- `examples/netcdf_reservoir/restart_part1.control`
+- `examples/netcdf_reservoir/restart_part2.control`
 - [`example_netcdf_control_file.control`](example_netcdf_control_file.control)
 
 ## Run RBM
@@ -166,6 +171,23 @@ Two-argument ASCII execution remains supported:
 ```bash
 ./src/rbm10_VIC <input_prefix> <output_prefix>
 ```
+
+## Continue a Run
+
+Set `restart_output_file` to save state after the configured `end_date`.
+Set `restart_input_file` in the next control file and begin on the immediately
+following day. The netCDF-enabled binary checks that dates, calendars,
+topology, model settings, and reservoir metadata are compatible before loading
+the state. Use separate output prefixes for each chunk.
+
+Run the packaged continuous-versus-split reservoir check with:
+
+```bash
+examples/netcdf_reservoir/run_restart_and_validate.sh
+```
+
+See [restart files](restart_files.md) for the full workflow and ASCII forcing
+requirements.
 
 ## Select the Outputs
 
@@ -203,6 +225,7 @@ From the repository root, either example can also be run directly:
 ```bash
 examples/netcdf_grid_remap/run_and_validate.sh
 examples/netcdf_reservoir/run_and_validate.sh
+examples/netcdf_reservoir/run_restart_and_validate.sh
 ```
 
 Validation should check more than successful execution:

@@ -7,9 +7,11 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     use Block_Control
     use data_type
 #ifdef USE_NETCDF
-    use Netcdf_Output, only: NC_OUTPUT_INIT, NC_OUTPUT_CLOSE
+    use Netcdf_Output, only: NC_OUTPUT_INIT, NC_OUTPUT_CLOSE, &
+        NC_OUTPUT_POSITION_INIT
     use Netcdf_Input, only: NC_INPUT_INIT, NC_INPUT_CLOSE, flow_time_calendar
     use Netcdf_Reservoir
+    use Netcdf_Restart, only: READ_RESTART_NETCDF, WRITE_RESTART_NETCDF
 #endif
     !
     Implicit None
@@ -53,7 +55,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !
     real,dimension(:),allocatable     :: T_head,T_smth,T_trib
 
-    logical:: DONE, end_of_reservoir
+    logical:: DONE, end_of_reservoir, restart_loaded, reset_year_state
     logical:: ns_res_pres
 #ifdef USE_NETCDF
     logical:: output_uses_noleap
@@ -197,6 +199,30 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     ! Initialize smoothed air temperatures for estimating headwaters temperatures
     !
     T_smth=4.0
+    T_trib=4.0
+    n1=1
+    n2=2
+    nobs=0
+    ndays=0
+    restart_loaded=.FALSE.
+    surface_area = res_area_km2(:) * km_to_m * km_to_m
+#ifdef USE_NETCDF
+    if (TRIM(control_input_format) .eq. "netcdf") call NC_INPUT_INIT()
+    if (LEN_TRIM(control_restart_input_file) .gt. 0) then
+        call READ_RESTART_NETCDF(TRIM(control_restart_input_file),flow_time_calendar, &
+            n1,n2,T_head,T_smth,T_trib)
+        restart_loaded=.TRUE.
+    end if
+    if (control_write_netcdf .or. LEN_TRIM(control_restart_input_file) .gt. 0 .or. &
+        LEN_TRIM(control_restart_output_file) .gt. 0) then
+        output_uses_noleap = .true.
+        if (TRIM(control_input_format) .eq. "netcdf") then
+            output_uses_noleap = TRIM(flow_time_calendar) .eq. "noleap" .or. &
+                TRIM(flow_time_calendar) .eq. "365_day"
+        end if
+        call NC_OUTPUT_POSITION_INIT(output_uses_noleap)
+    end if
+#endif
     !
     !     open the output file
     !
@@ -205,12 +231,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     end if
 #ifdef USE_NETCDF
     if (control_write_netcdf) then
-        output_uses_noleap = .true.
-        if (TRIM(control_input_format) .eq. "netcdf") then
-            call NC_INPUT_INIT()
-            output_uses_noleap = TRIM(flow_time_calendar) .eq. "noleap" .or. &
-                TRIM(flow_time_calendar) .eq. "365_day"
-        end if
         call NC_OUTPUT_INIT(TRIM(temp_file)//'.nc',output_uses_noleap)
     end if
 #else
@@ -224,18 +244,10 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !
     ! Initialize dummy counters that facilitate updating simulated values
     !
-    n1=1
-    n2=2
-    nobs=0
-    ndays=0
     xwpd=nwpd
     hpd=1./xwpd
     jul_start = Julian(start_year,start_month,start_day)
     jul_end = Julian(end_year,end_month,end_day)
-    !
-    !     Reservoir geomorphic information initialization
-    !
-    surface_area = res_area_km2(:) * km_to_m * km_to_m
     !
     !     Year loop starts
     !
@@ -246,17 +258,22 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
         !
         !     Reset stratification and turnover
         !
-        res_stratif_start = .FALSE.
-        res_turnover = .FALSE.
-        !
-        !     At the start of each year, reset the depth of epilimnion
-        !     and hypolimnion.
-        !
-        res_depth_meter = depth_e(:) + depth_h(:)
-        depth_e = res_depth_meter(:) * depth_e_frac
-        depth_h = res_depth_meter(:) * depth_h_frac
-        volume_e_x = surface_area(:) * depth_e(:)
-        volume_h_x = surface_area(:) * depth_h(:)
+        reset_year_state = .TRUE.
+        if (restart_loaded .and. nyear .eq. start_year .and. &
+            (start_month .ne. 1 .or. start_day .ne. 1)) reset_year_state = .FALSE.
+        if (reset_year_state) then
+            res_stratif_start = .FALSE.
+            res_turnover = .FALSE.
+            !
+            !     At the start of each year, reset the depth of epilimnion
+            !     and hypolimnion.
+            !
+            res_depth_meter = depth_e(:) + depth_h(:)
+            depth_e = res_depth_meter(:) * depth_e_frac
+            depth_h = res_depth_meter(:) * depth_h_frac
+            volume_e_x = surface_area(:) * depth_e(:)
+            volume_h_x = surface_area(:) * depth_h(:)
+        end if
         !
         !     Day loop starts
         !
@@ -637,7 +654,8 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                         if (exceed_error_bound .and..not.adjust_timestep) then
                                              adjust_timestep=.TRUE.
                                              recalculate_volume=.TRUE.
-                                             if (nyear.eq.start_year.and.nd.eq.1) then
+                                             if (.not.restart_loaded .and. &
+                                                 nyear.eq.start_year.and.nd.eq.1) then
                                                 initial_storage(res_no)=.TRUE. 
                                              end if
                                              go to 500
@@ -719,11 +737,15 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !     ******************************************************
     !
 #ifdef USE_NETCDF
-    if (TRIM(control_input_format) .eq. "netcdf") then
-        call NC_INPUT_CLOSE()
-    end if
     if (control_write_netcdf) then
         call NC_OUTPUT_CLOSE()
+    end if
+    if (LEN_TRIM(control_restart_output_file) .gt. 0) then
+        call WRITE_RESTART_NETCDF(TRIM(control_restart_output_file),end_year,end_month,end_day, &
+            flow_time_calendar,n1,T_head,T_smth,T_trib)
+    end if
+    if (TRIM(control_input_format) .eq. "netcdf") then
+        call NC_INPUT_CLOSE()
     end if
     if (LEN_TRIM(control_reservoir_data_file) .gt. 0) then
         call CLOSE_RESERVOIR_NC()

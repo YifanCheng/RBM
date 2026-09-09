@@ -24,6 +24,7 @@ nav:
     - 'netCDF Topology': 'Documentation/netcdf_topology.md'
     - 'Grid-to-HRU Remapping': 'Documentation/grid_to_hru_remap.md'
     - 'Reservoir Input': 'Documentation/netcdf_reservoir.md'
+    - 'Restart Files': 'Documentation/restart_files.md'
     - 'Output Files': 'Documentation/output_files.md'
     - 'ASCII VIC-RBM Tutorial': 'Documentation/tutorial.md'
 - Development:

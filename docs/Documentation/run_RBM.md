@@ -132,6 +132,8 @@ Paths are interpreted relative to the directory from which RBM is run.
 | `reservoir_file` | ASCII reservoir parameters |
 | `reservoir_storage_file` | ASCII daily reservoir storage |
 | `reservoir_sel_withdraw_file` | ASCII daily selective-withdrawal fractions |
+| `restart_input_file` | Optional state from the immediately preceding run chunk |
+| `restart_output_file` | Optional state written after the configured `end_date` |
 | `output_prefix` | Required output path and filename prefix |
 | `start_date`, `end_date` | Required valid calendar dates in `YYYYMMDD` form |
 | `source` | ASCII source-water option |
@@ -180,6 +182,33 @@ To calculate nonzero local runoff, add both `<local_flow_file>` and
 in m2, then computes `Q_local` in cfs with the documented formula. These inputs are optional because some forcing datasets do not include local
 flow. See [grid-to-HRU remapping](grid_to_hru_remap.md)
 for the variable names and formula.
+
+### Restarted and Chunked Runs
+
+Long simulations and forecasts can be divided into separate commands. The first
+chunk writes a restart file, and the next chunk reads it:
+
+```text
+<start_date> 19790101
+<end_date> 19791231
+<restart_output_file> /data/output/state_19791231.nc
+```
+
+```text
+<start_date> 19800101
+<end_date> 19801231
+<restart_input_file> /data/output/state_19791231.nc
+<restart_output_file> /data/output/state_19801231.nc
+```
+
+Restart files require `rbm10_VIC_nc`. Use a distinct `output_prefix` for each
+chunk. With netCDF forcing, RBM saves the exact next flow, heat, and local-flow
+records. A later chunk may use the same archive or a later archive containing
+those records, including across `noleap` calendar boundaries. Each ASCII
+forcing file must begin at its chunk `start_date` because ASCII input has no
+calendar coordinate. See
+[restart files](restart_files.md) for state contents, validation rules, and the
+packaged split-run test.
 
 ### Validate Two ASCII Temperature Outputs
 
