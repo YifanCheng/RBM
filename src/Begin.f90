@@ -4,20 +4,28 @@ Subroutine BEGIN(param_file,spatial_file)
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use Block_Control
+#ifdef USE_NETCDF
+    use Netcdf_Topology
+    use Netcdf_Reservoir
+#endif
     !
     implicit none
     !
     character (len=8) :: end_date,start_date     
     character (len=8) :: lat
     character (len=10):: long
+    character (len=512):: network_line
     character (len=200):: param_file,source_file,spatial_file
     !
     integer:: Julian
     integer:: head_name,trib_cell
     integer:: jul_start,main_stem,nyear1,nyear2,nc,ncell,nseg
     integer:: ns_max_test,node,ncol,nrow,nr,cum_sgmnt
+    integer:: lat_id
     !
     integer:: nreservoir,nseg_temp,nseg_cum
+    integer:: ios
     !
     logical:: first_cell,source
     !
@@ -32,7 +40,12 @@ Subroutine BEGIN(param_file,spatial_file)
     !
     !     Card Group I
     !
-    read(90,*) start_date,end_date
+    if (control_file_mode) then
+        start_date = control_start_date
+        end_date = control_end_date
+    else
+        read(90,*) start_date,end_date
+    end if
     read(start_date,'(i4,2i2)') start_year,start_month,start_day
     read(end_date,  '(i4,2i2)') end_year,end_month,end_day
     nyear1=start_year
@@ -44,7 +57,42 @@ Subroutine BEGIN(param_file,spatial_file)
     !
     jul_start = Julian(start_year,start_month,start_day)
     !
-    read(90,*) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+    if (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0) then
+#ifdef USE_NETCDF
+        call READ_TOPOLOGY_NETCDF(spatial_file)
+        return
+#else
+        write(*,*) 'NetCDF topology input requires rbm10_VIC_nc.'
+        stop 1
+#endif
+    end if
+    !
+    if (control_file_mode) then
+        do
+            read(90,'(A)',iostat=ios) network_line
+            if (ios .ne. 0) then
+                write(*,*) 'Could not find network counts in control-file network file.'
+                write(*,*) 'Expected: nreach flow_cells heat_cells source reservoir nres [select_withdraw]'
+                stop 1
+            end if
+            network_line = ADJUSTL(network_line)
+            if (LEN_TRIM(network_line) .eq. 0) cycle
+            if (network_line(1:1) .lt. '0' .or. network_line(1:1) .gt. '9') cycle
+            read(network_line,*,iostat=ios) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+            if (ios .eq. 0) exit
+            select_withdraw = .FALSE.
+            read(network_line,*,iostat=ios) nreach,flow_cells,heat_cells,source,reservoir,nres
+            if (ios .eq. 0) exit
+        end do
+    else
+        read(90,*) nreach,flow_cells,heat_cells,source,reservoir,nres,select_withdraw
+    end if
+    if (control_file_mode) then
+        source = control_source
+        reservoir = control_reservoir
+        nres = control_nres
+        select_withdraw = control_select_withdraw
+    end if
     !
     ! Allocate dynamic arrays
     !
@@ -67,6 +115,11 @@ Subroutine BEGIN(param_file,spatial_file)
     conflnce=0
     allocate(reach_cell(nreach,ns_max))
     allocate(head_cell(nreach))
+    allocate(hru_id(heat_cells))
+    allocate(grid_row(heat_cells))
+    allocate(grid_col(heat_cells))
+    allocate(grid_lat(heat_cells))
+    allocate(grid_lon(heat_cells))
     allocate(segment_cell(nreach,ns_max))
     allocate(x_dist(nreach,0:ns_max))
     !
@@ -97,18 +150,27 @@ Subroutine BEGIN(param_file,spatial_file)
     !     Read in reservoir information
     !
     if(reservoir) then
-        read(37,*) ! Skip the first line in reservoir file
-        do nreservoir = 1,nres
-            read(37,*) dam_number(nreservoir),  &
-                       dam_grid_lat(nreservoir), dam_grid_lon(nreservoir), &
-                       res_depth_meter(nreservoir), res_width_meter(nreservoir), &
-                       res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
-                       res_start_node(nreservoir), res_end_node(nreservoir)
+#ifdef USE_NETCDF
+        if (control_file_mode .and. LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+            call READ_RESERVOIR_NC_PARAMETERS()
+        else
+#endif
+            read(37,*) ! Skip the first line in reservoir file
+            do nreservoir = 1,nres
+                read(37,*) dam_number(nreservoir),  &
+                           dam_grid_lat(nreservoir), dam_grid_lon(nreservoir), &
+                           res_depth_meter(nreservoir), res_width_meter(nreservoir), &
+                           res_area_km2(nreservoir), res_capacity_mcm(nreservoir), &
+                           res_start_node(nreservoir), res_end_node(nreservoir)
 
-            print *, dam_number(nreservoir), res_depth_meter(nreservoir), &
-                     res_width_meter(nreservoir), res_area_km2(nreservoir), &
-                     res_start_node(nreservoir), res_end_node(nreservoir)
-        end do
+                if (control_verbose) print *, dam_number(nreservoir), &
+                    res_depth_meter(nreservoir), res_width_meter(nreservoir), &
+                    res_area_km2(nreservoir), res_start_node(nreservoir), &
+                    res_end_node(nreservoir)
+            end do
+#ifdef USE_NETCDF
+        end if
+#endif
     end if
     !
     !     Card Group IIb. Reach characteristics
@@ -119,7 +181,7 @@ Subroutine BEGIN(param_file,spatial_file)
         !
         nseg=0
         nseg_cum=0
-        write(*,*) ' Starting to read reach ',nr
+        if (control_verbose) write(*,*) ' Starting to read reach ',nr
         !
         !     Read the number of cells in this reach, the headwater #,
         !     the number of the cell where it enters the next higher order stream,
@@ -132,13 +194,22 @@ Subroutine BEGIN(param_file,spatial_file)
         ! Set boundary distance
         !
         x_dist(nr,0)=miles_to_ft*rmile0
-        write(*,*) 'reach number', nr, 'boundary_distance', x_dist(nr,0)
+        if (control_verbose) write(*,*) 'reach number', nr, 'boundary_distance', x_dist(nr,0)
         !
         !     If this is reach that is tributary to cell TRIB_CELL, give it the
         !     pointer TRIB(TRIB_CELL) the index of this reach for further use.
         !     Also keep track of the total number of tributaries for this cell
         !
         if (trib_cell.gt.0) then
+            if (trib_cell .gt. heat_cells) then
+                write(*,*) 'Network topology error: tributary cell is out of range: ', trib_cell
+                stop 1
+            end if
+            if (no_tribs(trib_cell) .ge. size(trib,2)) then
+                write(*,*) 'Network topology error: more than ', size(trib,2), &
+                    ' tributaries enter cell ', trib_cell
+                stop 1
+            end if
             no_tribs(trib_cell) = no_tribs(trib_cell)+1
             trib(trib_cell,no_tribs(trib_cell)) = nr
         end if
@@ -177,15 +248,31 @@ Subroutine BEGIN(param_file,spatial_file)
             if (reservoir) then
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0,i6)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
-                !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell),res_num(ncell)
+                read(lat,*,iostat=ios) lat_id
+                if (ios .eq. 0) then
+                    hru_id(ncell)=lat_id
+                else
+                    hru_id(ncell)=node
+                end if
                 if(res_num(ncell) .gt. 0) then
                     res_pres(ncell) = .TRUE.
                 end if
             else
                 read(90,'(5x,i5,5x,i5,8x,i5,6x,a8,6x,a10,7x,f10.0,f5.0)')  &
                     node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
-                !write(*,*) node,nrow,ncol,lat,long,rmile1,ndelta(ncell)
+                read(lat,*,iostat=ios) lat_id
+                if (ios .eq. 0) then
+                    hru_id(ncell)=lat_id
+                else
+                    hru_id(ncell)=node
+                end if
             end if
+            grid_row(ncell)=nrow
+            grid_col(ncell)=ncol
+            read(lat,*,iostat=ios) grid_lat(ncell)
+            if (ios .ne. 0) grid_lat(ncell)=0.0
+            read(long,*,iostat=ios) grid_lon(ncell)
+            if (ios .ne. 0) grid_lon(ncell)=0.0
             !
             !    Set the number of segments of the default, if not specified
             !
@@ -210,19 +297,25 @@ Subroutine BEGIN(param_file,spatial_file)
             nndlta=0
 200     continue
         nndlta=nndlta+1
+        if (nseg .ge. ns_max) then
+            write(*,*) 'RBM is terminating because NS_MAX would be exceeded in reach ', nr
+            write(*,*) 'Increase NS_MAX in Block_Network to at least: ', nseg+1
+            stop 1
+        end if
         nseg=nseg+1
         segment_cell(nr,nseg)=ncell
-        !write(*,*) 'nndlta -- ',nr,nndlta,nseg,ncell,segment_cell(nr,nseg)
         x_dist(nr,nseg)=x_dist(nr,nseg-1)-dx(ncell)
         !
         !   Write Segment List for mapping to temperature output (UW_JRY_2008/11/19)
         !
-        do nseg_temp=1,nseg_out_num
-            if (nseg_out(nr,ncell,nseg_temp).eq.nseg) then
-                open(22,file=TRIM(spatial_file),status='unknown') ! (changed by WUR_WF_MvV_2011/01/05)
-                write(22,'(4i6,1x,a8,1x,a10,i5)') nr,ncell,nrow,ncol,lat,long,nseg_temp
-            end if
-        end do
+        if (control_write_ascii) then
+            do nseg_temp=1,nseg_out_num
+                if (nseg_out(nr,ncell,nseg_temp).eq.nseg) then
+                    open(22,file=TRIM(spatial_file),status='unknown') ! (changed by WUR_WF_MvV_2011/01/05)
+                    write(22,'(4i6,1x,a8,1x,a10,i5)') nr,ncell,nrow,ncol,lat,long,nseg_temp
+                end if
+            end do
+        end if
         !
         !
         !
@@ -232,7 +325,7 @@ Subroutine BEGIN(param_file,spatial_file)
         no_celm(nr)=nseg
         segment_cell(nr,nseg)=ncell
         x_dist(nr,nseg)=miles_to_ft*rmile1
-        write(*,*) 'number of segment in reach', nr, nseg
+        if (control_verbose) write(*,*) 'number of segment in reach', nr, nseg
     !
     ! End of cell and segment loop
     !
@@ -255,7 +348,7 @@ end do
 if(ns_max_test.gt.ns_max) then
     write(*,*) 'RBM is terminating because'
     write(*,*) 'NS_MAX exceeded. Change NS_MAX in Block_Network to: ',ns_max_test
-    stop
+    stop 1
 end if
 !
 nwpd=1

@@ -4,6 +4,11 @@ SUBROUTINE Read_Forcing
     USE Block_Hydro
     USE Block_Network
     USE Block_Reservoir
+    USE Block_Control
+#ifdef USE_NETCDF
+    USE Netcdf_Input
+    USE Netcdf_Reservoir
+#endif
     !
     IMPLICIT NONE
     !
@@ -13,6 +18,16 @@ SUBROUTINE Read_Forcing
     real    :: z_temp,w_temp
     real    :: min_flow = 5.0
     real    :: min_depth = 5.0
+    !
+    if (TRIM(control_input_format) .eq. "netcdf") then
+#ifdef USE_NETCDF
+        call READ_FORCING_NETCDF()
+#else
+        write(*,*) "NetCDF input requires rbm10_VIC_nc."
+        stop
+#endif
+        return
+    end if
     !
     n1=1
     n2=2
@@ -73,14 +88,10 @@ SUBROUTINE Read_Forcing
             Q_avg=0.5*(Q_in(no_heat)+Q_out(no_heat))
             dt(no_heat)=dx(no_heat)/u(no_heat)
             !
-            !  Added check to see if travel time of parcel exceeds the
-            !  computational interval.  If so, it writes to file fort.45.
-            !  One should check to see if there are NaN's at that node.
-            !  (UW_JRY_2011/03/15)
-            !
-            if(dt(no_heat).gt.dt_comp) write(45,*) &
-                'Travel time=',dt(no_heat) &
-                , '> dt_comp at node -',no_heat
+            ! Warn when parcel travel time exceeds the computational interval.
+            if (dt(no_heat) .gt. dt_comp) write(*,*) &
+                'RBM warning: travel time=',dt(no_heat), &
+                ' exceeds dt_comp at node ',no_heat
         end do
         !
         ! Tributary flow is Q_out from the next to the last cell
@@ -123,21 +134,28 @@ SUBROUTINE Read_Forcing
         end if
     end do
     !
-    ! Read in reservoir storage data
-    !
-    res_storage(:,n2)=res_storage(:,n1)
-    read(38,*) ! Skip reading the date in storage file
-    do nreservoir=1,nres
-        read(38,*) res_storage(nreservoir, n1)
-    end do
-    !
-    ! Read in reservoir selective withdrawal data
-    !
-    read(39,*) ! Skip reading the date in selective withdraw file
-    do nreservoir=1,nres
-        read(39,*) eh_withdraw_ratio(nreservoir, n1) &
-                  ,eh_withdraw_ratio(nreservoir, n2)
-    end do
+    ! Two-argument runs read the ASCII forcing directly. Control-file runs skip
+    ! reservoir inputs when reservoir simulation is disabled.
+    if (.not. control_file_mode .or. reservoir) then
+#ifdef USE_NETCDF
+        if (control_file_mode .and. LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+            call READ_RESERVOIR_NC_DAY(ndays)
+        else
+#endif
+            res_storage(:,n2)=res_storage(:,n1)
+            read(38,*) ! Skip reading the date in storage file
+            do nreservoir=1,nres
+                read(38,*) res_storage(nreservoir, n1)
+            end do
+            read(39,*) ! Skip reading the date in selective withdraw file
+            do nreservoir=1,nres
+                read(39,*) eh_withdraw_ratio(nreservoir, n1) &
+                          ,eh_withdraw_ratio(nreservoir, n2)
+            end do
+#ifdef USE_NETCDF
+        end if
+#endif
+    end if
     !
     ! Call the water balance subroutine
     !

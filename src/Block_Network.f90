@@ -4,6 +4,8 @@ Module Block_Network
 !
     integer, dimension(:), allocatable  ::no_celm,no_cells,no_tribs
     integer, dimension(:), allocatable  ::head_cell
+    integer, dimension(:), allocatable  ::hru_id
+    integer, dimension(:), allocatable  ::grid_row,grid_col
 !
     integer, dimension(:,:), allocatable::conflnce,reach_cell,segment_cell,trib
 !
@@ -26,6 +28,7 @@ Module Block_Network
     real   :: dt_comp
     real   :: dt_res
     real, dimension(:), allocatable  :: ndelta
+    real, dimension(:), allocatable  ::grid_lat,grid_lon
 !
 !      Logical variables
 !

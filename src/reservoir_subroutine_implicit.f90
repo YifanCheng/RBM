@@ -32,9 +32,6 @@ SUBROUTINE reservoir_subroutine_implicit(res_no,q_surf,nd,tair)
     end if
     log_K_z = log10(n_stability) * (-1)  - 5.699 ! high scenario - 2  w/ adjusted intercept based on empirical equation in Quay et al. 1980, Fig 11
     K_z(res_no) = 10**log_K_z
-    ! ONLY for no stratification run:
-    write(57, *) res_no,K_z(res_no)
-    !
     !     Implicit method to solve the energy balance equation
     !
     coeff_e1 = volume_e_x(res_no) + flow_in_epi_x + K_z(res_no) * surface_area(res_no)

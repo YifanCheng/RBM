@@ -4,7 +4,15 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     use Block_Hydro
     use Block_Network
     use Block_Reservoir
+    use Block_Control
     use data_type
+#ifdef USE_NETCDF
+    use Netcdf_Output, only: NC_OUTPUT_INIT, NC_OUTPUT_CLOSE, &
+        NC_OUTPUT_POSITION_INIT
+    use Netcdf_Input, only: NC_INPUT_INIT, NC_INPUT_CLOSE, flow_time_calendar
+    use Netcdf_Reservoir
+    use Netcdf_Restart, only: READ_RESTART_NETCDF, WRITE_RESTART_NETCDF
+#endif
     !
     Implicit None
     !
@@ -21,6 +29,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     integer          :: npart,nseg,nx_s,nx_part,nx_head
     integer          :: ns_res_num, res_no, nsegment
     integer          :: nseg_temp
+    integer          :: Julian, jul_start, jul_end, jul_current
     !
     ! Indices for lagrangian interpolation
     !
@@ -46,8 +55,11 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !
     real,dimension(:),allocatable     :: T_head,T_smth,T_trib
 
-    logical:: DONE
+    logical:: DONE, end_of_reservoir, restart_loaded, reset_year_state
     logical:: ns_res_pres
+#ifdef USE_NETCDF
+    logical:: output_uses_noleap
+#endif
     !
     !
     ! Allocate the arrays
@@ -119,13 +131,58 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     allocate (dV_dt_hyp(nres))
     allocate (depth_e(nres))
     allocate (depth_h(nres))
+    depth_e = res_depth_meter(:) * depth_e_frac
+    depth_h = res_depth_meter(:) * depth_h_frac
     allocate (volume_h_min(nres))
     allocate (volume_e_min(nres))
     allocate (res_stratif_start(nres))
     allocate (res_turnover(nres))
     !
     !
-    ! Initialize some arrays
+    ! Initialize model state explicitly so results do not depend on allocator history.
+    !
+    depth = 0.0
+    Q_in = 0.0
+    Q_out = 0.0
+    Q_local = 0.0
+    Q_diff = 0.0
+    delta_sto_flux = 0.0
+    Q_trib = 0.0
+    width = 0.0
+    u = 0.0
+    dt = 0.0
+    dbt = 0.0
+    ea = 0.0
+    Q_ns = 0.0
+    Q_na = 0.0
+    press = 0.0
+    wind = 0.0
+    T_trib = 4.0
+    res_trib_calc = .FALSE.
+    res_start = .FALSE.
+    T_res_in = 4.0
+    Q_res_in = 0.0
+    water_withdrawal = 0.0
+    temp_change_ep = 0.0
+    temp_change_hyp = 0.0
+    temp_out = 4.0
+    T_res = 4.0
+    diffusion_tot = 0.0
+    advec_hyp_tot = 0.0
+    advec_epi_tot = 0.0
+    qsurf_tot = 0.0
+    volume_e_x = 0.0
+    volume_h_x = 0.0
+    surface_area = 0.0
+    K_z = 0.0
+    ns_res_start = 0
+    ns_res_end = 0
+    Q_res_outflow = 0.0
+    Q_res_inflow = 0.0
+    dV_dt_epi = 0.0
+    dV_dt_hyp = 0.0
+    volume_h_min = 0.0
+    volume_e_min = 0.0
     !
     dt_part=0.
     x_part=0.
@@ -142,24 +199,55 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     ! Initialize smoothed air temperatures for estimating headwaters temperatures
     !
     T_smth=4.0
-    !
-    !     open the output file
-    !
-    open(20,file=TRIM(temp_file),status='unknown')
-    !
-    !
-    ! Initialize dummy counters that facilitate updating simulated values
-    !
+    T_trib=4.0
     n1=1
     n2=2
     nobs=0
     ndays=0
+    restart_loaded=.FALSE.
+    surface_area = res_area_km2(:) * km_to_m * km_to_m
+#ifdef USE_NETCDF
+    if (TRIM(control_input_format) .eq. "netcdf") call NC_INPUT_INIT()
+    if (LEN_TRIM(control_restart_input_file) .gt. 0) then
+        call READ_RESTART_NETCDF(TRIM(control_restart_input_file),flow_time_calendar, &
+            n1,n2,T_head,T_smth,T_trib)
+        restart_loaded=.TRUE.
+    end if
+    if (control_write_netcdf .or. LEN_TRIM(control_restart_input_file) .gt. 0 .or. &
+        LEN_TRIM(control_restart_output_file) .gt. 0) then
+        output_uses_noleap = .true.
+        if (TRIM(control_input_format) .eq. "netcdf") then
+            output_uses_noleap = TRIM(flow_time_calendar) .eq. "noleap" .or. &
+                TRIM(flow_time_calendar) .eq. "365_day"
+        end if
+        call NC_OUTPUT_POSITION_INIT(output_uses_noleap)
+    end if
+#endif
+    !
+    !     open the output file
+    !
+    if (control_write_ascii) then
+        open(20,file=TRIM(temp_file),status='unknown')
+    end if
+#ifdef USE_NETCDF
+    if (control_write_netcdf) then
+        call NC_OUTPUT_INIT(TRIM(temp_file)//'.nc',output_uses_noleap)
+    end if
+#else
+    if (control_write_netcdf) then
+        write(*,*) "netCDF output requested, but this executable was built without netCDF support."
+        write(*,*) "Build and run rbm10_VIC_nc, or set <output_format> ascii."
+        stop 1
+    end if
+#endif
+    !
+    !
+    ! Initialize dummy counters that facilitate updating simulated values
+    !
     xwpd=nwpd
     hpd=1./xwpd
-    !
-    !     Reservoir geomorphic information initialization
-    !
-    surface_area = res_area_km2(:) * km_to_m * km_to_m
+    jul_start = Julian(start_year,start_month,start_day)
+    jul_end = Julian(end_year,end_month,end_day)
     !
     !     Year loop starts
     !
@@ -170,21 +258,30 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
         !
         !     Reset stratification and turnover
         !
-        res_stratif_start = .FALSE.
-        res_turnover = .FALSE.
-        !
-        !     At the start of each year, reset the depth of epilimnion
-        !     and hypolimnion.
-        !
-        res_depth_meter = depth_e(:) + depth_h(:)
-        depth_e = res_depth_meter(:) * depth_e_frac
-        depth_h = res_depth_meter(:) * depth_h_frac
-        volume_e_x = surface_area(:) * depth_e(:)
-        volume_h_x = surface_area(:) * depth_h(:)
+        reset_year_state = .TRUE.
+        if (restart_loaded .and. nyear .eq. start_year .and. &
+            (start_month .ne. 1 .or. start_day .ne. 1)) reset_year_state = .FALSE.
+        if (reset_year_state) then
+            res_stratif_start = .FALSE.
+            res_turnover = .FALSE.
+            !
+            !     At the start of each year, reset the depth of epilimnion
+            !     and hypolimnion.
+            !
+            res_depth_meter = depth_e(:) + depth_h(:)
+            depth_e = res_depth_meter(:) * depth_e_frac
+            depth_h = res_depth_meter(:) * depth_h_frac
+            volume_e_x = surface_area(:) * depth_e(:)
+            volume_h_x = surface_area(:) * depth_h(:)
+        end if
         !
         !     Day loop starts
         !
         DO nd=1,nd_year
+            if (control_file_mode) then
+                jul_current = Julian(nyear,1,1) + nd - 1
+                if (jul_current .lt. jul_start .or. jul_current .gt. jul_end) cycle
+            end if
             year=nyear
             xd=nd
             xd_year=nd_year
@@ -309,8 +406,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                             ! Set initial river storage (Initial storage for first grid cell is 0)
                             !
                             do nm=no_dt(ns),1,-1
-                                if (ncell.eq.1827.and.nd.eq.197) write(88,*) &
-                                    nyear,nd,ns,nm
                                 dt_calc=dt_part(nm)
                                 z=depth(nncell)
                                 call energy(T_0,q_surf,nncell,z,nd)
@@ -334,8 +429,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                 !
                                 error_EE=deriv_2nd*dt_calc**2/2
                                 !
-                                !if (ncell.eq.4089 .and. nd.gt.220.and.nd.lt.230) write(*,*) &
-                                !     nyear,nd,ns,nm,wind(nncell),q_ns(nncell)+q_na(nncell),T_0,error_EE
                                 if(T_0.lt.0.0) T_0=0.0
                                 q_dot_pre = q_dot
                                 !
@@ -387,14 +480,16 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                 Q_inflow = Q_outflow
                                 !
                                 nseg=nseg+1
-                                nncell=segment_cell(nr,nseg)
-                                !
-                                !     Reset tributary flag if this is a new cell
-                                !
-                                if(ncell0.ne.nncell) then
-                                    ncell0=nncell
-                                    Q_inflow = Q_in(nncell)
-                                    DONE=.FALSE.
+                                if (nseg .le. no_celm(nr)) then
+                                    nncell=segment_cell(nr,nseg)
+                                    !
+                                    !     Reset tributary flag if this is a new cell
+                                    !
+                                    if(ncell0.ne.nncell) then
+                                        ncell0=nncell
+                                        Q_inflow = Q_in(nncell)
+                                        DONE=.FALSE.
+                                    end if
                                 end if
                                 dt_total=dt_total+dt_calc
                             end do
@@ -407,15 +502,10 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                         !   if the segment is located in reservoir
                         !
                         !   
-                        !   test output for a specific grid cell 
-                        !
-                        !
-                        if (ncell.eq.1827.and.nd.eq.197) write(*,*) nyear,nd,nr,ncell,ns,T_0
                         do nseg_temp=1,nseg_out_num
                             if (nseg_out(nr,ncell,nseg_temp).eq.ns) then
-                                call WRITE(time,nd,nr,ncell,ns,T_0,T_head(nr),dbt(ncell), &
+                                call WRITE(time,nd,ndays,nr,ncell,ns,T_0,T_head(nr),dbt(ncell), &
                                     Q_inflow_out, Q_outflow_out)
-                            if (ncell.eq.1827) write(89,*)nyear,nd,nr,ncell,ns,T_0,temp_equil,time_equil,deriv_2nd*dt_comp**2/2
                             end if
                         end do
                         end if
@@ -423,7 +513,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                         if (res_pres(ncell)) then
                             !  res_no is the reservoir number
                             res_no = res_num(ncell)
-                            !write(*,*) res_no
                             !
                             !     If it is located in the first segment in the
                             !     river reach, initialization for calculation
@@ -492,9 +581,16 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                 !
                                 !     If it is the last segment in the reservoir
                                 !
-                                if(ncell .eq. res_end_node(res_no) .and. &
-                                    (.NOT. res_pres(segment_cell(nr,ns+1)) &
-                                    .or. res_num(segment_cell(nr,ns+1)) .ne. res_no)) then
+                                end_of_reservoir = .FALSE.
+                                if (ncell .eq. res_end_node(res_no)) then
+                                    if (ns .ge. no_celm(nr)) then
+                                        end_of_reservoir = .TRUE.
+                                    else
+                                        end_of_reservoir = .NOT. res_pres(segment_cell(nr,ns+1)) .or. &
+                                            res_num(segment_cell(nr,ns+1)) .ne. res_no
+                                    end if
+                                end if
+                                if (end_of_reservoir) then
                                     exceed_error_bound=.FALSE.
                                     adjust_timestep=.FALSE.
                                     recalculate_volume=.FALSE.
@@ -558,7 +654,8 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                         if (exceed_error_bound .and..not.adjust_timestep) then
                                              adjust_timestep=.TRUE.
                                              recalculate_volume=.TRUE.
-                                             if (nyear.eq.start_year.and.nd.eq.1) then
+                                             if (.not.restart_loaded .and. &
+                                                 nyear.eq.start_year.and.nd.eq.1) then
                                                 initial_storage(res_no)=.TRUE. 
                                              end if
                                              go to 500
@@ -582,7 +679,7 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                                     do nsegment=ns_res_start(res_no),ns_res_end(res_no)
                                         do nseg_temp=1,nseg_out_num
                                             if (nseg_out(nr,ncell,nseg_temp).eq.nsegment) then
-                                                call WRITE(time,nd,nr,ncell,nsegment,T_0, &
+                                                call WRITE(time,nd,ndays,nr,ncell,nsegment,T_0, &
                                                     T_head(nr),dbt(segment_cell(nr,nsegment)), &
                                                     Q_res_inflow(res_no), Q_res_outflow(res_no)) !, &
 !                                                    res_storage_post, T_res(res_no))
@@ -623,8 +720,6 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
                     write(75, '(i8, i6, 1680f20.10)') nyear, nd, T_epil(:), T_hypo(:), T_res_inflow(:),& 
                         depth_e(:), depth_h(:),&
                         Q_res_inflow(:), Q_res_outflow(:)
-                    write(76,'(i8, i6, 240f15.10, 240f15.10)') nyear, nd, depth_e(:), depth_h(:), volume_e_x,volume_h_x
-                    write(77,*) nyear, nd, diffusion_tot, advec_hyp_tot,advec_epi_tot,qsurf_tot
                 end if
             end do
         !
@@ -641,5 +736,20 @@ SUBROUTINE SYSTMM(temp_file,res_file,param_file)
     !                        return to rmain
     !     ******************************************************
     !
+#ifdef USE_NETCDF
+    if (control_write_netcdf) then
+        call NC_OUTPUT_CLOSE()
+    end if
+    if (LEN_TRIM(control_restart_output_file) .gt. 0) then
+        call WRITE_RESTART_NETCDF(TRIM(control_restart_output_file),end_year,end_month,end_day, &
+            flow_time_calendar,n1,T_head,T_smth,T_trib)
+    end if
+    if (TRIM(control_input_format) .eq. "netcdf") then
+        call NC_INPUT_CLOSE()
+    end if
+    if (LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+        call CLOSE_RESERVOIR_NC()
+    end if
+#endif
 950 return
 end SUBROUTINE SYSTMM

@@ -1,7 +1,6 @@
 subroutine stream_density(temp_x,density_x)
     use data_type
     implicit none
-    !integer :: res_no
     real(dp) :: density_x
     real :: temp_x
     real(dp) :: para1 = 1.000028*1e-3
@@ -23,7 +22,6 @@ subroutine stream_density(temp_x,density_x)
         & (para4*(temp_x**2)+para5*(temp_x**3))+&
         & (para6*(temp_x**4)+para7*(temp_x**5)))/&
         & (para9+para8*temp_x)
-    !if (res_no.eq.42) write(11,*) "temp",temp_x,"density",density_x
 !
 end subroutine stream_density
 

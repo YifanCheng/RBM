@@ -1,0 +1,87 @@
+! Example RBM control file for the integrated netCDF workflow.
+! Copy this file and replace the paths with local paths before running.
+!
+! Run with the netCDF-capable executable:
+!   ./rbm10_VIC_nc /path/to/example_netcdf_control_file.control
+!
+! For an ASCII-input run, set <input_format> ascii and point <flow_file>
+! and <heat_file> to the preprocessed ASCII forcing files.
+
+! Topology input:
+!   Use <network_file> for the ASCII Network file, or
+!   use <topology_file> for the new netCDF topology file.
+! Provide only one of these in a normal run.
+<topology_file> /path/to/dises_77011225_topology.nc
+! <network_file> /path/to/dises_77011225_Network
+<flow_file> /path/to/dises.test.09081000_77011225.h.2000.nc
+<heat_file> /path/to/DISES.default.clm2.h1a.09081000_77011225.2000.nc
+! Optional grid-to-HRU remapping weights for raw grid meteorology files.
+! Omit this when <heat_file> is already HRU/reach-remapped.
+! <heat_remap_file> /path/to/spatialweights_dises_09081000_77011225.nc
+! Optional local-flow calculation. Supply both files or neither.
+! The local file must provide daily OUT_RUNOFF and OUT_BASEFLOW in mm; the
+! area file must provide static grid-cell area in m2.
+! Include these inputs whenever the basin workflow expects nonzero Q_local.
+! <local_flow_file> /path/to/vic_runoff_and_baseflow.nc
+! <area_file> /path/to/vic_grid_area.nc
+! Required only when <reservoir> is True:
+! Preferred consolidated netCDF input:
+! <reservoir_data_file> /path/to/reservoir_data.nc
+! Alternatively, use all three ASCII reservoir inputs:
+! <reservoir_file> /path/to/reservoir_parameters.txt
+! <reservoir_storage_file> /path/to/reservoir_storage.txt
+! <reservoir_sel_withdraw_file> /path/to/reservoir_withdrawal.txt
+<output_prefix> /path/to/output/dises_77011225_rbm
+
+! NetCDF forcing time coordinates must be daily and use:
+!   time:units = "days since YYYY-MM-DD ..."
+! RBM locates start_date separately in the flow and heat files.
+<start_date> 20000101
+<end_date> 20001230
+<source> False
+<reservoir> False
+<nres> 0
+<select_withdraw> False
+<verbose> False
+
+! Input options: ascii | netcdf
+<input_format> netcdf
+
+! Output options: ascii | netcdf | both
+! If omitted, output_format defaults to input_format.
+<output_format> both
+
+! Flow netCDF variables.
+<flow_var> KWroutedRunoff
+<flow_id_var> reachID
+
+! Hydraulic options. Defaults use the standard RBM coefficients.
+! Set these values for the basin and streamflow product being used.
+<flow_units> m3/s
+<a_d> 0.408
+<b_d> 0.392
+<a_w> 4.346
+<b_w> 0.520
+<min_flow> 5.0
+<min_velocity> 0.5
+<min_depth> 5.0
+
+! Optional local-flow variable overrides.
+! <local_runoff_var> OUT_RUNOFF
+! <local_baseflow_var> OUT_BASEFLOW
+! <area_var> area
+
+! Meteorology/heat netCDF ID variable.
+<heat_id_var> hruId
+
+! For RBM-ready converted meteorology netCDF files, use the default names:
+!   Tair_degC, vp_mb, SW_mmKs, LW_mmKs, P_mb, U10
+!
+! For raw CLM meteorology files, set heat_tair_var to TSA. RBM will then
+! read the raw CLM variables TSA, RH2M, FSDS, FLDS, PBOT, and U10.
+<heat_tair_var> TSA
+<heat_vp_var> vp_mb
+<heat_sw_var> SW_mmKs
+<heat_lw_var> LW_mmKs
+<heat_press_var> P_mb
+<heat_wind_var> U10

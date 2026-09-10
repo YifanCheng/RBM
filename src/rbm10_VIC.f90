@@ -40,6 +40,10 @@ PROGRAM RBM10_VIC
     !use BGIN
     !use SYSTM
     !
+    use Block_Control
+#ifdef USE_NETCDF
+    use Netcdf_Reservoir
+#endif
     implicit none
     !
     !
@@ -55,6 +59,7 @@ PROGRAM RBM10_VIC
     character (len=200 ):: reservoir_file
     character (len=200 ):: reservoir_storage_file
     character (len=200 ):: reservoir_sel_withdraw_file
+    character (len=200 ):: control_file
     character (len=8)   :: start_data,end_data
     integer iargc
     integer numarg
@@ -62,69 +67,125 @@ PROGRAM RBM10_VIC
     ! Command line input
     !
     numarg = iargc ( )
-    if (numarg .lt. 2) then
-        write (*,*) 'Too few arguments were given'
+    if (numarg .ne. 1 .and. numarg .ne. 2) then
+        write (*,*) 'Invalid number of arguments'
         write (*,*) ' '
-        write (*,*) 'First:  Location and prefix of input files'
-        write (*,*) '        (networkfile and parameterfile)'
-        write (*,*) 'Second: Location and prefix of output files'
+        write (*,*) 'Two-argument ASCII mode:'
+        write (*,*) '  $ <program-name> <input_prefix> <output_prefix>'
+        write (*,*) 'Control-file mode:'
+        write (*,*) '  $ <program-name> <control_file>'
         write (*,*) ' '
-        write (*,*) 'eg: $ <program-name> ./input/Salmon_0.50 ./output/Salmon_Test'
-        write (*,*) ' '
-        stop
+        stop 1
     end if
-    call getarg ( 1, inPrefix )
-    call getarg ( 2, outPrefix )
+    if (numarg .eq. 1) then
+        call getarg ( 1, control_file )
+        call READ_CONTROL(control_file)
+#ifndef USE_NETCDF
+        if (control_write_netcdf) then
+            write(*,*) "netCDF output requested, but this executable was built without netCDF support."
+            write(*,*) "Build and run rbm10_VIC_nc, or set <output_format> ascii."
+            stop 1
+        end if
+        if (LEN_TRIM(control_restart_input_file) .gt. 0 .or. &
+            LEN_TRIM(control_restart_output_file) .gt. 0) then
+            write(*,*) "Restart files require the netCDF-enabled executable."
+            write(*,*) "Build and run rbm10_VIC_nc, or remove the restart controls."
+            stop 1
+        end if
+#endif
+        if (LEN_TRIM(control_topology_file) .gt. 0) then
+#ifdef USE_NETCDF
+            net_file = control_topology_file
+#else
+            write(*,*) 'NetCDF topology input requires rbm10_VIC_nc.'
+            stop 1
+#endif
+        else
+            net_file = control_network_file
+        end if
+        outPrefix = control_output_prefix
+        inPrefix = ''
+    else
+        call getarg ( 1, inPrefix )
+        call getarg ( 2, outPrefix )
+        net_file = TRIM(inPrefix)//'_Network'
+    end if
     !
     ! Identify input/output files
     !
-    net_file      = TRIM(inPrefix)//'_Network'
     param_file    = TRIM(inPrefix)//'_Parameters'
     spatial_file  = TRIM(outPrefix)//'.Spat'
     temp_file     = TRIM(outPrefix)//'.Temp'
     res_file      = TRIM(outPrefix)//'.Resv'
     !
-    write(*,*) 'Network file    : ',net_file
-    write(*,*) 'Parameter file  : ',param_file!
-    write(*,*) 'Temperature file: ',temp_file
-    write(*,*) 'Spatial file: ',spatial_file
-    write(*,*) 'Reservoir file:   ',res_file
+    if (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0) then
+        write(*,*) 'Topology file   : ',net_file
+    else
+        write(*,*) 'Network file    : ',net_file
+    end if
+    if (.not. control_file_mode) write(*,*) 'Parameter file  : ',param_file
+    if (control_write_ascii) then
+        write(*,*) 'Temperature file: ',temp_file
+        write(*,*) 'Spatial file    : ',spatial_file
+    end if
+    if (control_write_netcdf) write(*,*) 'NetCDF output   : ',TRIM(temp_file)// '.nc'
+    if (.not. control_file_mode .or. control_reservoir) then
+        write(*,*) 'Reservoir file  : ',res_file
+    end if
     !
-    OPEN(UNIT=90,FILE=TRIM(net_file),STATUS='OLD')
+    if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) then
+        OPEN(UNIT=90,FILE=TRIM(net_file),STATUS='OLD')
+    end if
     !
     !     Read header information from control file
     !
-    read(90,*)
-    read(90,'(A)') flow_file
+    if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) then
+        read(90,*)
+    end if
+    if (control_file_mode) then
+        flow_file = control_flow_file
+        heat_file = control_heat_file
+        reservoir_file = control_reservoir_file
+        reservoir_storage_file = control_reservoir_storage_file
+        reservoir_sel_withdraw_file = control_reservoir_sel_withdraw_file
+    else
+        read(90,'(A)') flow_file
+        read(90,'(A)') heat_file
+        read(90,'(A)') reservoir_file
+        read(90,'(A)') reservoir_storage_file
+        read(90,'(A)') reservoir_sel_withdraw_file
+    end if
     !
     !     Open file with hydrologic data
     !
-    open(unit=35,FILE=TRIM(flow_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
-    !
-    !
-    read(90,'(A)') heat_file
-    !
-    !     Open file with meteorologic data
-    !
-    open(unit=36,FILE=TRIM(heat_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
-    !
-    read(90,'(A)') reservoir_file
+    if (TRIM(control_input_format) .ne. 'netcdf') then
+        open(unit=35,FILE=TRIM(flow_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+        !
+        !     Open file with meteorologic data
+        !
+        open(unit=36,FILE=TRIM(heat_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+    end if
     !
     !     Open file with reservoir parameters
     !
-    open(unit=37,FILE=TRIM(reservoir_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
-    !
-    read(90,'(A)') reservoir_storage_file
+    if (.not. control_file_mode .or. &
+        (control_reservoir .and. LEN_TRIM(control_reservoir_data_file) .eq. 0)) then
+        open(unit=37,FILE=TRIM(reservoir_file), ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     !
     !     Open file with reservoir storage data
     !
-    open(unit=38,FILE=TRIM(reservoir_storage_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
-    !
-    read(90,'(A)') reservoir_sel_withdraw_file
+        open(unit=38,FILE=TRIM(reservoir_storage_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
     !
     !     Open file with reservoir selective withdrawal data
     !
-    open(unit=39,FILE=TRIM(reservoir_sel_withdraw_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+        open(unit=39,FILE=TRIM(reservoir_sel_withdraw_file),ACCESS='SEQUENTIAL',FORM='FORMATTED', STATUS='old')
+    end if
+#ifndef USE_NETCDF
+    if (control_file_mode .and. LEN_TRIM(control_reservoir_data_file) .gt. 0) then
+        write(*,*) 'NetCDF reservoir input requires rbm10_VIC_nc.'
+        stop 1
+    end if
+#endif
     !
     !     Call systems programs to get started
     !
@@ -145,11 +206,16 @@ PROGRAM RBM10_VIC
     !
     write(*,*) ' Closing files after simulation'
 
-    CLOSE(35)
-    CLOSE(36)
-    CLOSE(37)
-    CLOSE(38)
-    CLOSE(39)
-    CLOSE(90)
+    if (TRIM(control_input_format) .ne. 'netcdf') then
+        CLOSE(35)
+        CLOSE(36)
+    end if
+    if (.not. control_file_mode .or. &
+        (control_reservoir .and. LEN_TRIM(control_reservoir_data_file) .eq. 0)) then
+        CLOSE(37)
+        CLOSE(38)
+        CLOSE(39)
+    end if
+    if (.not. (control_file_mode .and. LEN_TRIM(control_topology_file) .gt. 0)) CLOSE(90)
     STOP
 END PROGRAM RBM10_VIC

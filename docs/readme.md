@@ -7,11 +7,8 @@ The RBM documentation source files are written in [Markdown](https://help.github
 
 ## Requirements
 
-To edit the documentation, all you need is a text editor.
-
-To build the documentation, there are two requirements:
-- [Python](https://www.python.org/) version 2.6, 2.7, 3.3 or 3.4.
-- [`mkdocs`](http://www.mkdocs.org/) project to build its documentation.
+To edit the documentation, all you need is a text editor. To build it, install
+a currently supported Python 3 release and [MkDocs](https://www.mkdocs.org/).
 
 ## Building and serving the documentation locally
 
@@ -20,7 +17,7 @@ After editing the RBM documentation, and before committing it to the git reposit
 #### build
 from the top level of the RBM repository, run:
 
-`mkdocs build`
+`mkdocs build --strict`
 
 #### serve
 from the top level of the RBM repository, run:
@@ -31,7 +28,9 @@ For more information on how to interact with the built docs, check out the `mkdo
 
 ## Read The Docs
 
-The RBM documentation is served by [Read the Docs](https://readthedocs.org/) at http://vic.readthedocs.org. This allows us to provide multiple versions of the VIC documentation, served simultaneously from the same location.  
+The RBM documentation can be hosted by [Read the Docs](https://readthedocs.org/)
+or another MkDocs-compatible service. Configure the service to build this
+repository's `mkdocs.yml`.
 
 Currently, there are three builds (versions) scheduled for the RBM documentation:
 

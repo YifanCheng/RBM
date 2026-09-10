@@ -1,4 +1,233 @@
-# Steps to run RBM (Salmon River example)
+# Running RBM
+
+New users should begin with the [RBM User Guide](user_guide.md), then use
+the [Control-File Reference](control_file.md) while preparing a basin. This page
+provides command details and includes the Salmon River VIC/Perl ASCII procedure.
+
+## Control-File Workflow
+
+The control-file workflow accepts ASCII or netCDF forcing through one control
+file. The two-argument ASCII command remains available and is described later
+in this document.
+
+### Build
+
+The regular build supports two-argument and control-file ASCII runs:
+
+```sh
+cd src
+make clean
+make rbm10_VIC
+```
+
+The netCDF build requires the netCDF C and Fortran development libraries,
+including the `nc-config` and `nf-config` commands:
+
+```sh
+cd src
+make clean
+make rbm10_VIC_nc
+```
+
+On CCR, the tested environment is:
+
+```sh
+module load gcc/11.2.0 openmpi/4.1.1 netcdf-fortran/4.5.3 netcdf/4.8.1
+export LD_LIBRARY_PATH="$(nf-config --prefix)/lib:$(nc-config --prefix)/lib64:$LD_LIBRARY_PATH"
+```
+
+For non-CCR systems, install the netCDF-C and netCDF-Fortran development
+packages using the system package manager, then confirm that both configuration
+commands are available:
+
+```sh
+nc-config --version
+nf-config --version
+```
+
+Common package names are:
+
+| System | Installation command |
+| --- | --- |
+| Ubuntu/Debian | <code>sudo apt install gfortran make libnetcdf-dev libnetcdff-dev</code> |
+| Fedora/RHEL | <code>sudo dnf install gcc-gfortran make netcdf-devel netcdf-fortran-devel</code> |
+| macOS with Homebrew | <code>brew install gcc netcdf netcdf-fortran</code> |
+
+Package names and compiler paths can vary by distribution. A successful
+installation must provide <code>gfortran</code>, <code>nc-config</code>, and
+<code>nf-config</code>.
+
+The model itself does not require Python, xarray, numpy, or a separate Python
+pre/postprocessing environment. Python 3 is used only by the optional output
+comparison tests. Always run `make clean` when changing compilers or module
+stacks so objects built by different compiler versions are not mixed.
+
+Run the dependency-free comparison-tool tests from `src` with:
+
+```sh
+make test
+```
+
+The fastest end-to-end installation check is the included example:
+
+```sh
+examples/netcdf_grid_remap/run_and_validate.sh
+```
+
+### Run
+
+Start from
+[`example_netcdf_control_file.control`](example_netcdf_control_file.control)
+and replace its paths with local paths. Run netCDF input or output with:
+
+```sh
+./src/rbm10_VIC_nc /path/to/run.control
+```
+
+An ASCII-only control-file run can use:
+
+```sh
+./src/rbm10_VIC /path/to/run.control
+```
+
+The control file selects `ascii` or `netcdf` input and `ascii`, `netcdf`,
+or `both` output. A netCDF topology file can replace the ASCII Network
+file. See [RBM netCDF topology files](netcdf_topology.md) and
+[grid-to-HRU remapping](grid_to_hru_remap.md) for the required schemas.
+
+`<verbose>` is optional and defaults to `True`, preserving the standard
+console output.
+Set it to `False` to suppress per-reach and per-segment topology messages for
+large networks; errors and the run summary are still shown.
+
+### Output Selection
+
+| `input_format` | `output_format` | Files written |
+| --- | --- | --- |
+| `ascii` | omitted or `ascii` | `.Temp`, `.Spat` |
+| `ascii` | `netcdf` | `.Temp.nc` |
+| `ascii` | `both` | `.Temp`, `.Spat`, `.Temp.nc` |
+| `netcdf` | omitted or `netcdf` | `.Temp.nc` |
+| `netcdf` | `ascii` | `.Temp`, `.Spat` |
+| `netcdf` | `both` | `.Temp`, `.Spat`, `.Temp.nc` |
+
+When `<output_format>` is omitted, it defaults to `<input_format>`.
+The regular binary rejects netCDF input, topology, or output with a message
+directing the user to build `rbm10_VIC_nc`.
+
+### Control File Reference
+
+Paths are interpreted relative to the directory from which RBM is run.
+
+| Control field | Requirement |
+| --- | --- |
+| `network_file` | ASCII Network file; use this or `topology_file`, not both |
+| `topology_file` | Header-free netCDF river topology; use this or `network_file`, not both |
+| `flow_file` | Required ASCII or netCDF streamflow input |
+| `heat_file` | Required ASCII or netCDF meteorology/energy input |
+| `heat_remap_file` | Optional grid-to-HRU weights for gridded meteorology |
+| `local_flow_file` | Optional gridded runoff/baseflow; requires `area_file` |
+| `area_file` | Optional grid-cell area; requires `local_flow_file` |
+| `reservoir_data_file` | Preferred netCDF reservoir parameters, daily storage, and withdrawal fractions |
+| `reservoir_file` | ASCII reservoir parameters |
+| `reservoir_storage_file` | ASCII daily reservoir storage |
+| `reservoir_sel_withdraw_file` | ASCII daily selective-withdrawal fractions |
+| `restart_input_file` | Optional state from the immediately preceding run chunk |
+| `restart_output_file` | Optional state written after the configured `end_date` |
+| `output_prefix` | Required output path and filename prefix |
+| `start_date`, `end_date` | Required valid calendar dates in `YYYYMMDD` form |
+| `source` | ASCII source-water option |
+| `reservoir` | Enables reservoir calculations |
+| `nres` | Reservoir count; zero when reservoirs are disabled |
+| `select_withdraw` | Selective-withdrawal option; requires reservoirs |
+| `verbose` | Optional; defaults to `True` |
+| `input_format` | `ascii` or `netcdf` |
+| `output_format` | `ascii`, `netcdf`, or `both`; defaults to input format |
+| `flow_units` | Streamflow units: `m3/s` (default) or `cfs` |
+| `a_d`, `b_d` | Leopold coefficient and exponent for flow depth |
+| `a_w`, `b_w` | Leopold coefficient and exponent for channel width |
+| `min_flow` | Minimum discharge in cfs; defaults to `5.0` |
+| `min_velocity` | Minimum velocity in ft/s; defaults to `0.5` |
+| `min_depth` | Minimum flow depth in ft; defaults to `5.0` |
+
+Depth and width are calculated as `depth = a_d * Q^b_d` and
+`width = a_w * Q^b_w`, where `Q` is in cfs. Set these controls to values
+appropriate for the basin. The defaults preserve the standard RBM hydraulic limits.
+
+For reservoir runs, set `<reservoir> True`, set `<nres>`, and provide either
+one `<reservoir_data_file>` or all three ASCII reservoir fields. Do not
+provide both forms. The consolidated file works with ASCII or netCDF forcing
+when using `rbm10_VIC_nc`; the regular binary continues to support the
+ASCII reservoir files. See [netCDF reservoir input](netcdf_reservoir.md).
+
+The defaults use the standard mizuRoute/CLM variable names. Controls such as
+`<flow_var>`, `<flow_id_var>`, `<heat_tair_var>`, and the local-flow
+variable fields can override names when a compatible dataset uses different
+names. See the schema-specific documentation before overriding them.
+
+NetCDF forcing files must contain a one-dimensional daily `time` coordinate
+with units of `days since YYYY-MM-DD`. Gregorian, `noleap`, and `365_day`
+calendars are supported. RBM locates `start_date`
+independently in the flow and meteorology files, then consumes one record per
+simulation day. This preserves the established sequential behavior for
+`noleap` files while allowing subset runs and files with different time
+origins.
+
+RBM converts netCDF forcing to the documented model units and rounds values
+to the precision used by the corresponding ASCII forcing fields before
+simulation.
+
+To calculate nonzero local runoff, add both `<local_flow_file>` and
+`<area_file>`. RBM reads gridded runoff plus baseflow in mm and grid-cell area
+in m2, then computes `Q_local` in cfs with the documented formula. These inputs are optional because some forcing datasets do not include local
+flow. See [grid-to-HRU remapping](grid_to_hru_remap.md)
+for the variable names and formula.
+
+### Restarted and Chunked Runs
+
+Long simulations and forecasts can be divided into separate commands. The first
+chunk writes a restart file, and the next chunk reads it:
+
+```text
+<start_date> 19790101
+<end_date> 19791231
+<restart_output_file> /data/output/state_19791231.nc
+```
+
+```text
+<start_date> 19800101
+<end_date> 19801231
+<restart_input_file> /data/output/state_19791231.nc
+<restart_output_file> /data/output/state_19801231.nc
+```
+
+Restart files require `rbm10_VIC_nc`. Use a distinct `output_prefix` for each
+chunk. With netCDF forcing, RBM saves the exact next flow, heat, and local-flow
+records. A later chunk may use the same archive or a later archive containing
+those records, including across `noleap` calendar boundaries. Each ASCII
+forcing file must begin at its chunk `start_date` because ASCII input has no
+calendar coordinate. See
+[restart files](restart_files.md) for state contents, validation rules, and the
+packaged split-run test.
+
+### Validate Two ASCII Temperature Outputs
+
+The comparison helper uses only the Python standard library:
+
+```sh
+python3 tools/compare_rbm_outputs.py reference.Temp candidate.Temp
+```
+
+It verifies record count and ordering, then reports maximum and mean differences
+for stream, headwater, and air temperature plus Qin and Qout. Tolerances can be
+changed with `--temperature-tolerance` and `--flow-tolerance`.
+
+## ASCII VIC and Perl Workflow
+
+Use this procedure when preparing ASCII inputs through VIC and the routing
+tools. It is not required when streamflow, meteorology, and a completed topology
+are already available in the supported netCDF schemas.
+
 The following describes the steps for simulating water temperature with the grid-based semi-Lagrangian model, RBM, assuming one has downloaded [**VIC** 4.2.d](https://github.com/UW-Hydro/VIC/releases/tag/VIC.4.2.d) and prepared all the necessary input files. <br />
 
 ## 1. Download Source Code & Example Datasets
@@ -47,7 +276,7 @@ Note:
   * How to use command line to run a model?
 
     * The command line above is an abbreviate for ***full/path/to/executable/file -g full/path/to/global/parameter/file***. If the global parameter files are located in the current directory, you can use the command line above. If not, you need to add the full path before each file.
-    * This rule is also applied in the following steps. If the script/executable/control/parameter files are not in the current directory, you need to add the full paths to them. 
+    * This rule is also applied in the following steps. If the script/executable/control/parameter files are not in the current directory, you need to add the full paths to them.
 
 ### Step 2 Generate topology file
 In the folder, ***../Test_Case***, run the perl script, **build_network_beta.pl** (copied from ***../Perl_Scripts***) using the direction file. Example direction file **Salmon_flowd_0.5.dir** can be found in ***../Test_Case***. In the flow direction file, all the grid cells surrounding the basin of interest must contain a negative one (-1). Also, we cannot simulate a river system containing braided networks. The following is the command for generating the topology file for the Salman example:

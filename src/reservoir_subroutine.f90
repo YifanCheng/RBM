@@ -45,20 +45,12 @@ SUBROUTINE reservoir_subroutine(res_no,q_surf)
 
     if(flow_in_hyp_x .lt. volume_h_x(res_no)) then
         advec_in_hypx = flow_in_hyp_x * (T_res_inflow(res_no) - T_hypo(res_no)) /volume_h_x(res_no)
-        if(res_no .eq. 2) then
-            write(47,*) advec_in_hypx, flow_in_hyp_x, T_res_inflow(res_no), T_hypo(res_no), volume_h_x(res_no)
-        end if
     else
         advec_in_hypx = volume_h_x(res_no) * (T_res_inflow(res_no) - T_hypo(res_no))/volume_h_x(res_no)
     end if
 
     advec_epi_hyp = flow_epi_hyp_x *  (T_epil(res_no) - T_hypo(res_no)) /volume_h_x(res_no)
 
-    if(res_no .eq. 28) then
-    write(*,*) 'advec_in_epi',advec_in_epix, 'flow_in_epi',flow_in_epi_x, 'T_res_inflow', &
-            T_res_inflow(res_no),'T_epil)', T_epil(res_no), &
-            'vol',volume_e_x(res_no)
-    end if
     ! ------------------- calculate change in temperature  ---------------------
 
     ! ---------------- epilimnion -----------
@@ -85,11 +77,6 @@ SUBROUTINE reservoir_subroutine(res_no,q_surf)
     hypox= T_hypo(res_no)*(flow_out_hyp_x/outflow_x)  ! portion of temperature from hypol.
     temp_out(res_no) = epix + hypox   ! average outflow temperature
     volume_tot = volume_e_x(res_no)  + volume_h_x(res_no)
-    write(48,'(2f20.4, 6f20.4, 10f20.4)') T_res_in(res_no),T_epil(res_no), advec_in_epix, energy_x, dif_epi_x &
-                                  ,flow_in_epi_x, volume_e_x(res_no) &
-                                  ,T_hypo(res_no), advec_in_hypx, advec_epi_hyp, dif_hyp_x, flow_in_hyp_x,  volume_h_x(res_no) &
-                                  ,flow_epi_hyp_x,  temp_out(res_no), q_surf,  dt_comp, depth_e(res_no)
-    end if
     !
     !     Update reservoir storage based on water withdrawal
     !

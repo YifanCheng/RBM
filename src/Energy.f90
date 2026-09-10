@@ -31,7 +31,7 @@ SUBROUTINE Energy(T_surf,q_surf,ncell,z,nd)
 !     q=AT+B
 !
 !     Linear fit over the range of 2.0 deg C.
-!     These results can be used to estimate the "equilibrium" 
+!     These results can be used to estimate the "equilibrium"
 !     temperature and linear rate constant.
 !
    A=(q_fit(1)-q_fit(2))/(T_fit(1)-T_fit(2))
@@ -53,7 +53,7 @@ SUBROUTINE Energy(T_surf,q_surf,ncell,z,nd)
     deriv_evap=const2*(-0.57*(e0-ea(ncell))+(597.0-0.57*T_surf)*e0*(4157.0/((T_surf+239.09)**2)))
     deriv_ws=1.471E-3
 
-    deriv_2nd=deriv_1st*(deriv_conv-deriv_evap-deriv_ws)/(z*rfac) 
+    deriv_2nd=deriv_1st*(deriv_conv-deriv_evap-deriv_ws)/(z*rfac)
 !
 !     ******************************************************
 !               Calculate equilibrium temperature
@@ -75,7 +75,7 @@ if (ncell.eq.1827) then
         q_evap=q_evap*(e0-ea(ncell))
         q_ws=6.693E-2+1.471E-3*temp_equil
         q_tot=(q_ns(ncell)+q_na(ncell)-q_ws-q_evap+q_conv)
-        
+
         rate_temp=q_tot/(z*rfac)
 
         const1=1000.*evap_coeff*wind(ncell)*pf

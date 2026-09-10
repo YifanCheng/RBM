@@ -6,3 +6,15 @@
 *.mod
 # RBM executable
 rbm10_VIC
+rbm10_VIC_nc
+network_to_netcdf_topology
+# Python test caches
+__pycache__/
+*.py[cod]
+# Fortran runtime scratch files
+fort.*
+# Local validation workspaces and generated example output
+.codex_validation/
+validation_output/
+examples/netcdf_grid_remap/output/*
+!examples/netcdf_grid_remap/output/.gitkeep
