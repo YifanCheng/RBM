@@ -15,14 +15,17 @@ fi
 
 rm -f \
     "$output_dir/restart_full.Temp" \
+    "$output_dir/restart_full.Temp.nc" \
     "$output_dir/restart_full.Spat" \
     "$output_dir/restart_full.Resv" \
     "$output_dir/restart_full_state.nc" \
     "$output_dir/restart_part1.Temp" \
+    "$output_dir/restart_part1.Temp.nc" \
     "$output_dir/restart_part1.Spat" \
     "$output_dir/restart_part1.Resv" \
     "$output_dir/restart_part1_state.nc" \
     "$output_dir/restart_part2.Temp" \
+    "$output_dir/restart_part2.Temp.nc" \
     "$output_dir/restart_part2.Spat" \
     "$output_dir/restart_part2.Resv" \
     "$output_dir/restart_part2_state.nc" \
@@ -44,4 +47,5 @@ cmp "$output_dir/restart_full.Spat" "$output_dir/restart_part1.Spat"
 cmp "$output_dir/restart_full.Spat" "$output_dir/restart_part2.Spat"
 cmp "$output_dir/restart_full_state.nc" "$output_dir/restart_part2_state.nc"
 
-echo "Reservoir restart example passed: continuous and split runs are byte-identical."
+echo "Reservoir restart example passed: continuous and 15-day split runs are byte-identical."
+echo "NetCDF chunks: $output_dir/restart_part1.Temp.nc and $output_dir/restart_part2.Temp.nc"

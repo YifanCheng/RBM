@@ -6,7 +6,7 @@
 <reservoir_data_file> examples/netcdf_reservoir/input/reservoir_data.nc
 <output_prefix> examples/netcdf_reservoir/output/restart_full
 <start_date> 19790101
-<end_date> 19790102
+<end_date> 19790130
 <restart_output_file> examples/netcdf_reservoir/output/restart_full_state.nc
 <source> False
 <reservoir> True
@@ -14,7 +14,7 @@
 <select_withdraw> True
 <verbose> False
 <input_format> netcdf
-<output_format> ascii
+<output_format> both
 <flow_var> streamflow
 <flow_units> m3/s
 <a_d> 0.408

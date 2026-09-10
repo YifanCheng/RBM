@@ -5,8 +5,8 @@
 <area_file> examples/netcdf_reservoir/input/grid_area.nc
 <reservoir_data_file> examples/netcdf_reservoir/input/reservoir_data.nc
 <output_prefix> examples/netcdf_reservoir/output/restart_part2
-<start_date> 19790102
-<end_date> 19790102
+<start_date> 19790116
+<end_date> 19790130
 <restart_input_file> examples/netcdf_reservoir/output/restart_part1_state.nc
 <restart_output_file> examples/netcdf_reservoir/output/restart_part2_state.nc
 <source> False
@@ -15,7 +15,7 @@
 <select_withdraw> True
 <verbose> False
 <input_format> netcdf
-<output_format> ascii
+<output_format> both
 <flow_var> streamflow
 <flow_units> m3/s
 <a_d> 0.408

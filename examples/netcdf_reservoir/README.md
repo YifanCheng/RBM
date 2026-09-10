@@ -28,7 +28,7 @@ byte-for-byte with the packaged expected outputs.
 
 ## Restart Validation
 
-The same fixture includes a continuous run and a pair of one-day runs linked
+The same fixture includes a continuous 30-day run and two 15-day runs linked
 by a restart file:
 
 ```sh
@@ -39,16 +39,17 @@ The script verifies that concatenated `.Temp` and `.Resv` outputs, both
 `.Spat` files, and the final serialized model state are byte-identical to the
 continuous run. The controls are `restart_full.control`,
 `restart_part1.control`, and `restart_part2.control`.
+All three controls use `output_format=both` and produce `.Temp.nc` files.
 
 ## Inputs
 
 | File | Purpose |
 | --- | --- |
 | `input/topology.nc` | Completed river topology and reservoir cell IDs |
-| `input/streamflow.nc` | Two daily gridded streamflow records |
-| `input/meteorology_and_runoff.nc` | Meteorology, runoff, and baseflow |
+| `input/streamflow.nc` | Thirty daily gridded streamflow records |
+| `input/meteorology_and_runoff.nc` | Thirty daily meteorology, runoff, and baseflow records |
 | `input/grid_area.nc` | Grid-cell area for local-flow conversion |
-| `input/reservoir_data.nc` | Parameters, storage, and withdrawal fractions |
+| `input/reservoir_data.nc` | Parameters and thirty daily storage and withdrawal records |
 | `example.control` | Ready-to-run centralized configuration |
 
 The fixture is a compact subset of the project reservoir validation case. It is
